@@ -1,0 +1,700 @@
+"""Pluginets huvudklass: meny, verktygsfält och kommandon.
+
+Arbetsgången är som i Rita Detaljplan: man ritar först en yta, linje eller punkt (den hamnar i lagren under *Att
+tilldela*), och ger den sedan innehåll med verktyget *Tilldela innehåll*. Det som gäller hela planen ställs in under
+*Planens uppgifter*. *Avsluta redigering* (disketten) sparar eller förkastar ändringarna, som i Rita Detaljplan."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+from qgis.core import Qgis, QgsPointXY, QgsProject, QgsRectangle, QgsVectorLayer
+from qgis.PyQt.QtCore import QTimer
+from qgis.PyQt.QtGui import QCursor, QIcon
+from qgis.PyQt.QtWidgets import QAction, QFileDialog, QMenu, QMessageBox
+from qgis.PyQt import sip
+
+from .core import checkout, content, editing, export_lm, geopackage, importer, model, storage, underlag
+from .core.project import (PlanError, active_plan_group, draft_layers, is_read_only, layer_in_group, load_plan,
+                           plan_groups, plan_storage)
+from .gui.about_dialog import AboutDialog
+from .gui.assign_dialog import AssignDialog
+from .gui.assign_tool import AssignTool
+from .gui.checkout_actions import CheckoutActions
+from .gui.copy_tool import CopyTool
+from .gui.export_dialog import ExportDialog
+from .gui.import_dialog import ImportDialog
+from .gui.messages import push
+from .gui.new_plan_dialog import DATABASE, NewPlanDialog
+from .gui.plan_info_dialog import PlanInfoDialog
+from .gui.postgis_plan_dialog import PostgisPlanDialog
+from .gui.select_tool import SelectTool
+from .gui.toolbar import PlanToolBar, icon
+
+MENU = "&Rita Översiktsplan"
+TITLE = "Rita Översiktsplan"
+BRAND_ICON = Path(__file__).parent / "icon.svg"
+NO_PLAN = "Ingen översiktsplan är öppen. Skapa en med Ny översiktsplan eller öppna en befintlig."
+
+
+class OversiktsplanPlugin:
+    def __init__(self, iface):
+        self.iface = iface
+        self.actions: list[QAction] = []
+        self.toolbar: PlanToolBar | None = None
+        self.map_tools: dict = {}  # kartverktygen (assign, select, copy), skapas när de används första gången
+        self.copy_source: Optional[content.Candidate] = None  # Kopiera innehåll: objektet man kopierar från
+        self.copy_assignment: Optional[content.Assignment] = None
+        self.document_window = None  # programmet Skapa bokmärken i planhandling, om det är öppet
+        self.checkout = CheckoutActions(lambda text, warning: (self._warn if warning else self._info)(text),
+                                        iface.mainWindow(), after=self.refresh_tools)
+
+    @property
+    def assign_tool(self) -> Optional[AssignTool]:
+        return self.map_tools.get("assign")
+
+    # -- livscykel ----------------------------------------------------------------
+    def initGui(self):  # noqa: N802 - namnet krävs av QGIS
+        self.toolbar = PlanToolBar(self.iface, self, self.iface.mainWindow())
+        self.iface.addToolBar(self.toolbar)
+        if hasattr(self.iface, "currentLayerChanged"):  # knapparna följer planen man arbetar med
+            self.iface.currentLayerChanged.connect(self.refresh_tools)
+        project = QgsProject.instance()
+        project.readProject.connect(self.project_read)
+        project.layersAdded.connect(self._watch_layers)
+        project.layersRemoved.connect(self._refresh_later)
+        self._watch_layers(list(project.mapLayers().values()))
+        self.refresh_tools()
+
+        self._add_action("Ny översiktsplan…", self.new_plan, icon("new.svg"))  # samma ikoner som i verktygsfältet
+        self._add_action("Öppna översiktsplan…", self.open_plan, icon("open.svg"))
+        self._add_action("Importera geometri…", self.import_geometry, icon("import.svg"))
+        self._add_action("Planens uppgifter…", self.open_info, icon("info.svg"))
+        self._add_action("Exportera…", self.export_plan, icon("export.svg"))
+        self._add_action("Skapa bokmärken i planhandling…", self.open_document, icon("planhandling.svg"))
+        self._add_action("Spara alla redigeringar", self.save_all, icon("save.svg"))
+        self.iface.addPluginToMenu(MENU, self._separator())
+        toggle = self.toolbar.toggleViewAction()  # visa eller dölj verktygsfältet, som i QGIS lista över verktygsfält
+        self.iface.addPluginToMenu(MENU, toggle)
+        self.actions.append(toggle)
+        self.iface.addPluginToMenu(MENU, self._separator())
+        self._add_action("Om Rita Översiktsplan…", self.open_about)
+        self._brand_menu()
+
+    def unload(self):
+        project = QgsProject.instance()
+        for signal, slot in ((project.readProject, self.project_read), (project.layersAdded, self._watch_layers),
+                             (project.layersRemoved, self._refresh_later)):
+            try:
+                signal.disconnect(slot)
+            except TypeError:
+                pass
+        for layer in project.mapLayers().values():
+            if isinstance(layer, QgsVectorLayer):
+                for signal in (layer.editingStarted, layer.editingStopped):
+                    try:
+                        signal.disconnect(self.refresh_tools)
+                    except TypeError:
+                        pass
+        if hasattr(self.iface, "currentLayerChanged"):
+            try:
+                self.iface.currentLayerChanged.disconnect(self.refresh_tools)
+            except TypeError:
+                pass
+        for name in tuple(self.map_tools):
+            self._set_tool(name, False)
+        window = self._document_window()
+        if window is not None:
+            window.session.dirty = False  # pluginet stängs: fråga inte
+            window.close()
+        self.document_window = None
+        for action in self.actions:
+            self.iface.removePluginMenu(MENU, action)
+        self.actions.clear()
+        if self.toolbar is not None:
+            main_window = self.iface.mainWindow()
+            if main_window is not None:
+                main_window.removeToolBar(self.toolbar)
+            self.toolbar.deleteLater()
+            self.toolbar = None
+
+    # -- planen -------------------------------------------------------------------
+    def new_plan(self):
+        dialog = NewPlanDialog(self.iface.mainWindow())
+        if not dialog.exec():
+            return
+        if dialog.destination() == DATABASE:
+            connection, schema, plan_id = dialog.database_target()
+            try:
+                target = storage.create_postgis_plan(connection, schema, plan_id, dialog.plan())
+            except (storage.PostgisError, OSError, RuntimeError, ValueError) as exc:
+                self._warn(f"Kunde inte skapa översiktsplanen i databasen: {exc}")
+                return
+            if self._load(target):
+                self._info(f"Skapade planen {plan_id} i schemat {schema}. Den är skrivskyddad i databasen: checka ut "
+                           "den för att rita.")
+            return
+        target = dialog.target()
+        try:
+            geopackage.create_geopackage(target, dialog.plan())
+        except FileExistsError:
+            self._warn(f"Det finns redan en fil som heter {target.name} i mappen. Välj ett annat filnamn.")
+            return
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._warn(f"Kunde inte skapa översiktsplanen: {exc}")
+            return
+        if self._load(target):
+            self._info(f"Skapade {target.name}. Rita en yta, linje eller punkt och ge den innehåll med Tilldela "
+                       "innehåll.")
+
+    def open_plan(self):
+        """Öppnar en plan från en fil, eller (om QGIS har PostgreSQL-anslutningar) från en databas."""
+        source = self._ask_open_source() if storage.postgis_connections() else "file"
+        if source == "database":
+            self.open_database_plan()
+            return
+        if source != "file":
+            return
+        path, _ = QFileDialog.getOpenFileName(self.iface.mainWindow(), "Öppna översiktsplan", "",
+                                              "GeoPackage (*.gpkg)")
+        if path and self._load(Path(path)):
+            self._info(f"Öppnade {Path(path).name}.")
+
+    def open_database_plan(self) -> bool:
+        dialog = PostgisPlanDialog(self.iface.mainWindow())
+        if not dialog.exec() or dialog.selection() is None:
+            return False
+        connection, schema, plan_id = dialog.selection()
+        if not self._load(storage.PostgisStorage(connection, schema, plan_id)):
+            return False
+        self._info(f"Öppnade planen {plan_id} från databasen. Den är skrivskyddad: checka ut den för att rita.")
+        return True
+
+    def _ask_open_source(self) -> Optional[str]:
+        """En liten meny vid muspekaren (som i Rita Detaljplan): fil eller databas."""
+        menu = QMenu(self.iface.mainWindow())
+        file_action = menu.addAction(icon("open.svg"), "Lokal fil (GeoPackage)…")
+        db_action = menu.addAction(icon("checkout.svg"), "PostGIS-databas…")
+        chosen = menu.exec(QCursor.pos())
+        return "file" if chosen is file_action else "database" if chosen is db_action else None
+
+    # -- checka ut och in -------------------------------------------------------------
+    def toggle_checkout(self) -> bool:
+        """Knappen Checka ut / Checka in, beroende på var planen ligger just nu."""
+        group = self._group()
+        if group is None:
+            return False
+        state = checkout.state(group)
+        if state == checkout.LOCAL:
+            for name in tuple(self.map_tools):
+                self._set_tool(name, False)
+            return self.checkout.check_in(group)
+        if state == checkout.DATABASE:
+            return self.checkout.check_out(group)
+        self._info("Planen ligger i en fil och behöver inte checkas ut.")
+        return False
+
+    def project_read(self, *_) -> None:
+        """Ett sparat projekt öppnas: planer som läses direkt från databasen ska vara skrivskyddade."""
+        for group in plan_groups(QgsProject.instance()):
+            checkout.enforce_read_only(group)
+        self.refresh_tools()
+
+    def _refresh_later(self, *_) -> None:
+        """Lager tas bort (till exempel när projektet töms): uppdatera knapparna först när det är klart, inte mitt i."""
+        QTimer.singleShot(0, self.refresh_tools)
+
+    def _watch_layers(self, layers) -> None:
+        """Knapparna som kräver en redigeringssession följer lagrens redigeringsläge."""
+        for layer in layers:
+            if isinstance(layer, QgsVectorLayer):
+                layer.editingStarted.connect(self.refresh_tools)
+                layer.editingStopped.connect(self.refresh_tools)
+        self.refresh_tools()
+
+    def refresh_tools(self, *_) -> None:
+        """Gråar knappar som inte kan användas just nu: allt utom Ny och Öppna kräver en öppen plan, och att rita,
+        importera, tilldela och kopiera kräver att redigeringen är påbörjad (pennan)."""
+        if self.toolbar is None:
+            return
+        group = active_plan_group(QgsProject.instance(), self.iface.activeLayer())
+        is_editing = group is not None and editing.is_editing(group)
+        if not is_editing:
+            for name in ("assign", "copy"):
+                if name in self.map_tools:
+                    self._set_tool(name, False)
+        self.toolbar.set_state(group is not None, is_editing,
+                               checkout.state(group) if group is not None else checkout.FILE)
+
+    def _editable(self, group) -> bool:
+        """En plan i databasen är skrivskyddad: erbjud att checka ut den. True om planen går att ändra."""
+        if not is_read_only(group):
+            return True
+        return self.checkout.check_out(group)
+
+    def open_info(self):
+        """Planens uppgifter: planen, planhändelsen och standardvärdena för nytt innehåll. Sparas direkt med
+        dialogens Spara-knapp."""
+        group = self._group()
+        if group is None:
+            return
+        try:
+            info = content.read_plan_info(group)
+        except ValueError as exc:
+            self._warn(f"{exc}. Skapa planen på nytt med Ny översiktsplan.")
+            return
+        if not self._editable(group):
+            return
+        events = plan_storage(group).read_lookup(model.PLANHANDELSE_LOOKUP)
+        try:
+            current = underlag.read_underlag(group)
+        except ValueError as exc:
+            self._warn(str(exc))
+            return
+        dialog = PlanInfoDialog(info, events, self.iface.mainWindow(), current,
+                                plan_storage(group).read_lookup(model.UNDERLAGSTYP_LOOKUP))
+        if not dialog.exec():
+            return
+        try:
+            changed = content.write_plan_info(group, dialog.plan_info(), dialog.update_content.isChecked())
+            if dialog.underlag() != current:
+                underlag.save_underlag(group, dialog.underlag())
+        except ValueError as exc:
+            self._warn(str(exc))
+            return
+        group.setName(f"Översiktsplan – {dialog.plan_info().titel or plan_storage(group).name}")
+        self._info("Sparade planens uppgifter." + (f" {changed} objekt fick planens planhändelse." if changed else ""))
+
+    def export_plan(self) -> Optional[ExportDialog]:
+        """Exportera: kontrollerar planen och sparar den i Lantmäteriets format (JSON). Planen läses med osparade
+        ändringar."""
+        group = self._group()
+        if group is None:
+            return None
+        try:
+            collection, problems = export_lm.export(group)
+        except (OSError, ValueError, RuntimeError) as exc:
+            self._warn(f"Kunde inte exportera planen: {exc}")
+            return None
+
+        def save() -> Optional[str]:
+            where = plan_storage(group)
+            name = (group.name().split("–", 1)[-1].strip() or where.name)
+            safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "oversiktsplan"
+            folder = where.path.parent if isinstance(where, storage.GeoPackageStorage) else Path.home()
+            path = self._ask_export_path(str(folder / f"{safe}.json"))
+            if not path:
+                return None
+            try:
+                Path(path).write_text(export_lm.dumps(collection), encoding="utf-8")
+            except OSError as exc:
+                self._warn(f"Kunde inte spara: {exc}")
+                return None
+            text = f"Sparade {Path(path).name}."
+            self._info(text)
+            return text
+
+        dialog = ExportDialog(collection, problems, save, lambda table, fid: self._show_feature(group, table, fid),
+                              self.iface.mainWindow())
+        dialog.exec()
+        return dialog
+
+    def _ask_export_path(self, suggestion: str) -> str:
+        path, _ = QFileDialog.getSaveFileName(self.iface.mainWindow(), "Spara översiktsplanen som JSON", suggestion,
+                                              "Översiktsplan (JSON) (*.json)")
+        return path
+
+    def _show_feature(self, group, table: str, fid: int) -> None:
+        """Markerar och zoomar till ett objekt som kontrollen pekar på."""
+        layer = layer_in_group(group, table)
+        if layer is None:
+            return
+        self.iface.setActiveLayer(layer)
+        if layer.isSpatial():
+            editing.clear_selection(group)
+            layer.selectByIds([fid])
+            feature = layer.getFeature(fid)
+            canvas = self.iface.mapCanvas() if hasattr(self.iface, "mapCanvas") else None
+            if canvas is not None and feature.hasGeometry():
+                canvas.zoomToFeatureIds(layer, [fid])
+        elif hasattr(self.iface, "showAttributeTable"):
+            self.iface.showAttributeTable(layer)
+
+    def _document_window(self):
+        window = self.document_window
+        return window if window is not None and not sip.isdeleted(window) else None
+
+    def open_document(self):
+        """Skapa bokmärken i planhandling: ett eget fönster (som Tagga planbeskrivning i Rita Detaljplan) där planhandlingens
+        avsnitt granskas och kopplas till planens innehåll. Fönstret är inte modalt, så att man kan markera och rita i
+        kartan medan det är öppet. Är det redan öppet för samma plan läses planen om och fönstret visas."""
+        group = self._group()
+        if group is None:
+            return
+        from .bookmarks.main import open_window
+
+        window = self._document_window()
+        if window is not None and window.session.host.group is group:
+            window.reload_plan()
+            window.show()
+            window.raise_()
+            window.activateWindow()
+            return
+        if window is not None:
+            window.close()
+        self.document_window = open_window(group, self.iface.mainWindow())
+
+    # -- rita och tilldela ----------------------------------------------------------
+    def draw(self, suffix: str):
+        """Ritar en ny yta, linje eller punkt utan innehåll: lagret under Att tilldela blir aktivt och synligt,
+        redigeringen slås på och verktyget för att lägga till objekt väljs."""
+        group = self._group()
+        if group is None:
+            return
+        if not self._editable(group):
+            return
+        layer = draft_layers(group).get(suffix)
+        if layer is None:
+            self._warn(f"Lagret {model.DRAFT_LAYERS[suffix].alias} saknas i planen. Öppna planen på nytt.")
+            return
+        for name in tuple(self.map_tools):
+            self._set_tool(name, False)
+        node = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
+        if node is not None:
+            node.setItemVisibilityCheckedParentRecursive(True)
+        self.iface.setActiveLayer(layer)
+        if not layer.isEditable():
+            layer.startEditing()
+        self.iface.actionAddFeature().trigger()
+
+    def import_geometry(self) -> Optional[importer.ImportResult]:
+        """Importerar geometri (utan attribut) från ett annat lager till lagren under Att tilldela. Objekten läggs i
+        redigeringsbufferten och sparas med Spara."""
+        group = self._group()
+        if group is None:
+            return None
+        if not self._editable(group):
+            return None
+        targets = draft_layers(group)
+        if any(layer is None for layer in targets.values()):
+            self._warn("Lagren under Att tilldela saknas i planen. Öppna planen på nytt.")
+            return None
+        own = [node.layer() for node in group.findLayers() if node.layer() is not None]
+        dialog = ImportDialog(self.iface, own, self.iface.mainWindow(), targets["polygon"].crs().postgisSrid()
+                              or model.EPSG)
+        accepted = dialog.exec()
+        source, selected_only = dialog.source(), dialog.selected_only.isChecked()
+        dialog.release()
+        dialog.deleteLater()
+        if not accepted or source is None:
+            return None
+        result = importer.import_geometries(source, targets, selected_only)
+        for kind, count in result.counts.items():
+            node = QgsProject.instance().layerTreeRoot().findLayer(targets[kind].id())
+            if count and node is not None:
+                node.setItemVisibilityCheckedParentRecursive(True)
+        text = result.text() + (" Spara med Avsluta redigering (disketten) när du är nöjd, eller ångra med Ctrl+Z i lagret." if result.total else "")
+        (self._info if result.total and not result.invalid else self._warn)(text)
+        return result
+
+    # -- kartverktygen -------------------------------------------------------------
+    def _set_tool(self, name: str, on: bool, factory=None) -> None:
+        """Slår på eller av ett av pluginets kartverktyg. Byter man till ett annat verktyg släpps knappen upp."""
+        canvas = self.iface.mapCanvas() if hasattr(self.iface, "mapCanvas") else None
+        tool = self.map_tools.get(name)
+        if on:
+            if canvas is None or factory is None and tool is None:
+                self._set_checked(name, False)
+                return
+            if tool is None:
+                tool = factory(canvas)
+                tool.deactivated.connect(lambda n=name: self._set_checked(n, False))
+                self.map_tools[name] = tool
+            canvas.setMapTool(tool)
+        elif tool is not None and canvas is not None and canvas.mapTool() is tool:
+            canvas.unsetMapTool(tool)
+        self._set_checked(name, on)
+
+    def _set_checked(self, name: str, on: bool) -> None:
+        action = getattr(self.toolbar, f"act_{name}", None) if self.toolbar is not None else None
+        if action is not None and action.isChecked() != on:
+            action.blockSignals(True)
+            action.setChecked(on)
+            action.blockSignals(False)
+        if name == "copy" and not on:
+            self.reset_copy_source()
+
+    def set_assigning(self, on: bool):
+        """Slår på eller av verktyget Tilldela innehåll."""
+        if on and not self._tool_allowed():
+            self._set_checked("assign", False)
+            return
+        self._set_tool("assign", on, lambda canvas: AssignTool(canvas, self.assign_at))
+
+    def set_selecting(self, on: bool):
+        """Slår på eller av verktyget Markera."""
+        self._set_tool("select", on, lambda canvas: SelectTool(canvas, self.select_at, self.select_rect,
+                                                               self.deselect_all))
+
+    def set_copying(self, on: bool):
+        """Slår på eller av verktyget Kopiera innehåll."""
+        if on and not self._tool_allowed():
+            self._set_checked("copy", False)
+            return
+        self._set_tool("copy", on, lambda canvas: CopyTool(canvas, self.copy_at, self.reset_copy_source))
+        if on and "copy" in self.map_tools:
+            self._info("Kopiera innehåll: klicka på objektet du vill kopiera från.")
+
+    def _tool_allowed(self) -> bool:
+        group = active_plan_group(QgsProject.instance(), self.iface.activeLayer())
+        return group is None or self._editable(group)
+
+    # -- pennan ---------------------------------------------------------------------
+    def start_editing(self) -> bool:
+        """Öppnar alla planens lager för redigering (som pennan i Rita Detaljplan). En plan i databasen checkas ut
+        först."""
+        group = self._group()
+        if group is None or not self._editable(group):
+            return False
+        failed = editing.start_editing(group)
+        if failed:
+            self._warn(f"{failed} av planens lager kunde inte öppnas för redigering.")
+            return False
+        self._info("Planens lager är öppna för redigering. Rita, importera eller tilldela innehåll; avsluta med "
+                   "Avsluta redigering.")
+        return True
+
+    def stop_editing(self) -> bool:
+        """Avslutar redigeringen i planens lager. Finns det ändringar frågar pluginet om de ska sparas."""
+        group = self._group()
+        if group is None:
+            return False
+        if not editing.is_editing(group):
+            self._info("Ingen redigering pågår i planen.")
+            return False
+        answer = QMessageBox.StandardButton.Save
+        if editing.has_edits(group):
+            answer = self._ask_save()
+            if answer == QMessageBox.StandardButton.Cancel:
+                return False
+        save = answer == QMessageBox.StandardButton.Save
+        for name in tuple(self.map_tools):
+            self._set_tool(name, False)
+        errors = editing.stop_editing(group, save)
+        if errors:
+            self._warn("Kunde inte spara: " + " | ".join(errors))
+            return False
+        self._info("Sparade planen och avslutade redigeringen." if save else "Kastade ändringarna.")
+        return True
+
+    def _ask_save(self):
+        """Frågan när redigeringen avslutas (disketten), som i Rita Detaljplan."""
+        box = QMessageBox(self.iface.mainWindow())
+        box.setWindowTitle("Avsluta redigering")
+        box.setText("Vill du spara ändringarna i planen?")
+        box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard
+                               | QMessageBox.StandardButton.Cancel)
+        box.button(QMessageBox.StandardButton.Save).setText("Spara och avsluta")
+        box.button(QMessageBox.StandardButton.Discard).setText("Förkasta och avsluta")
+        box.button(QMessageBox.StandardButton.Cancel).setText("Avbryt")
+        box.setDefaultButton(QMessageBox.StandardButton.Save)
+        return QMessageBox.StandardButton(box.exec())
+
+    # -- markera ----------------------------------------------------------------------
+    def select_at(self, point: QgsPointXY, tolerance: float, add: bool = False) -> Optional[content.Candidate]:
+        """Klick med Markera: markerar objektet under klicket (en meny om flera ligger på varandra) och gör dess lager
+        aktivt, så att QGIS redigeringsverktyg fungerar direkt."""
+        group = self._group()
+        if group is None:
+            return None
+        candidates = content.candidates_at(group, point, tolerance)
+        if not candidates:
+            if not add:
+                editing.clear_selection(group)
+            return None
+        chosen = candidates[0] if len(candidates) == 1 else self.choose_candidate(candidates)
+        if chosen is None:
+            return None
+        editing.select(group, chosen, add)
+        self.iface.setActiveLayer(chosen.layer)
+        return chosen
+
+    def select_rect(self, rect: QgsRectangle, add: bool = False) -> int:
+        group = self._group()
+        return editing.select_in_rect(group, rect, add) if group is not None else 0
+
+    def deselect_all(self) -> None:
+        group = self._group()
+        if group is not None:
+            editing.clear_selection(group)
+
+    # -- kopiera innehåll -------------------------------------------------------------
+    def reset_copy_source(self) -> None:
+        self.copy_source, self.copy_assignment = None, None
+        tool = self.map_tools.get("copy")
+        if tool is not None:
+            tool.show_source(None)
+
+    def copy_at(self, point: QgsPointXY, tolerance: float) -> bool:
+        """Första klicket väljer objektet att kopiera från, nästa klick ger ett annat objekt samma innehåll. Returnerar
+        True när något kopierades."""
+        group = self._group()
+        if group is None:
+            return False
+        source = self.copy_source
+        if source is not None and not source.layer.getFeature(source.fid).isValid():
+            self.reset_copy_source()
+            source = None
+        candidates = content.candidates_at(group, point, tolerance)
+        if source is None:
+            assigned = [c for c in candidates if c.assigned]
+            if not assigned:
+                self._warn("Klicka på ett objekt med innehåll att kopiera från.")
+                return False
+            chosen = assigned[0] if len(assigned) == 1 else self.choose_candidate(assigned)
+            if chosen is None:
+                return False
+            self.copy_source, self.copy_assignment = chosen, editing.assignment_from(chosen)
+            tool = self.map_tools.get("copy")
+            if tool is not None:
+                tool.show_source(chosen.layer.getFeature(chosen.fid).geometry(), chosen.layer)
+            self._info(f"Kopierar {editing.describe(self.copy_assignment)}. Klicka på objekten som ska få samma "
+                       "innehåll; högerklick väljer en ny källa.")
+            return False
+        targets = [c for c in candidates if not (c.layer is source.layer and c.fid == source.fid)]
+        if not targets:
+            self._warn("Klicka på ett annat objekt: otilldelad geometri eller annat innehåll.")
+            return False
+        drafts = [c for c in targets if not c.assigned]
+        target = drafts[0] if drafts else (targets[0] if len(targets) == 1 else self.choose_candidate(targets))
+        if target is None:
+            return False
+        try:
+            layer, _ = content.assign(group, target, self.copy_assignment)
+        except ValueError as exc:
+            self._warn(str(exc))
+            return False
+        layer.triggerRepaint()
+        target.layer.triggerRepaint()
+        self._info(f"Kopierade {editing.describe(self.copy_assignment)}. Avsluta redigering (disketten) när du är klar.")
+        return True
+
+    def assign_at(self, point: QgsPointXY, tolerance: float) -> None:
+        """Klick med Tilldela innehåll: otilldelad geometri under klicket får innehåll, tilldelat innehåll kan byta
+        typ. Ligger flera tilldelade objekt på varandra väljer man vilket."""
+        group = self._group()
+        if group is None:
+            return
+        candidates = content.candidates_at(group, point, tolerance)
+        if not candidates:
+            self._warn("Inget ritat här. Rita en yta, linje eller punkt först, eller klicka på ett objekt i planen.")
+            return
+        drafts = [c for c in candidates if not c.assigned]
+        candidate = drafts[0] if drafts else (candidates[0] if len(candidates) == 1
+                                              else self.choose_candidate(candidates))
+        if candidate is None:
+            return
+        self.assign(group, candidate)
+
+    def assign(self, group, candidate: content.Candidate) -> bool:
+        if self.assign_tool is not None:
+            self.assign_tool.highlight(candidate.layer, candidate.fid)
+        lookups = {lookup.name: plan_storage(group).read_lookup(lookup) for lookup in model.LOOKUPS}
+        current = None
+        if candidate.assigned:
+            feature = candidate.layer.getFeature(candidate.fid)
+            current = {name: content.plain(feature[name]) for name in content.CONTENT_FIELDS
+                       if feature.fields().indexOf(name) >= 0}
+        dialog = AssignDialog(candidate.suffix, lookups, current, candidate.category, self.iface.mainWindow())
+        accepted = dialog.exec()
+        if self.assign_tool is not None:
+            self.assign_tool.clear_highlight()
+        if not accepted:
+            return False
+        assignment = dialog.assignment()
+        try:
+            layer, _ = content.assign(group, candidate, assignment)
+        except ValueError as exc:
+            self._warn(str(exc))
+            return False
+        layer.triggerRepaint()
+        candidate.layer.triggerRepaint()
+        self._info(f"{assignment.category.alias}: {assignment.values.get('innehallstyp_varde')}. Spara med "
+                   "Avsluta redigering (disketten) när du är klar.")
+        return True
+
+    def choose_candidate(self, candidates: list[content.Candidate]) -> Optional[content.Candidate]:
+        """Meny vid muspekaren när flera objekt ligger på varandra."""
+        menu = QMenu(self.iface.mainWindow())
+        for i, candidate in enumerate(candidates):
+            menu.addAction(candidate.label()).setData(i)
+        chosen = menu.exec(QCursor.pos())
+        return candidates[chosen.data()] if chosen is not None else None
+
+    # -- spara --------------------------------------------------------------------
+    def save_all(self) -> int:
+        """Sparar redigeringarna i alla lager i projektet. Redigeringen fortsätter, så att man kan rita vidare.
+        Returnerar antalet lager som sparades."""
+        saved, failed = 0, []
+        for layer in QgsProject.instance().mapLayers().values():
+            if isinstance(layer, QgsVectorLayer) and layer.isEditable() and layer.isModified():
+                if layer.commitChanges(False):
+                    saved += 1
+                else:
+                    failed.append(f"{layer.name()}: " + "; ".join(layer.commitErrors()))
+        if failed:
+            self._warn("Kunde inte spara " + " | ".join(failed))
+        elif saved:
+            self._info(f"Sparade {saved} lager.")
+        else:
+            self._info("Det fanns inget osparat.")
+        return saved
+
+    def open_about(self):
+        AboutDialog(self.iface.mainWindow()).exec()
+
+    # -- hjälpare -----------------------------------------------------------------
+    def _group(self):
+        group = active_plan_group(QgsProject.instance(), self.iface.activeLayer())
+        if group is None:
+            self._warn(NO_PLAN)
+        return group
+
+    def _load(self, source) -> bool:
+        try:
+            load_plan(source, QgsProject.instance())
+        except (PlanError, storage.PostgisError) as exc:
+            self._warn(str(exc))
+            return False
+        self.refresh_tools()
+        return True
+
+    def _brand_menu(self):
+        """Märket framför Rita Översiktsplan i menyn Insticksprogram (QGIS skapar undermenyn utan ikon)."""
+        plugin_menu = self.iface.pluginMenu()
+        if plugin_menu is None:
+            return
+        for entry in plugin_menu.actions():
+            if entry.menu() is not None and entry.menu().title() == MENU:
+                entry.setIcon(QIcon(str(BRAND_ICON)))
+                return
+
+    def _separator(self):
+        action = QAction(self.iface.mainWindow())
+        action.setSeparator(True)
+        self.actions.append(action)
+        return action
+
+    def _add_action(self, text, callback, icon=None):
+        action = QAction(icon, text, self.iface.mainWindow()) if icon else QAction(text, self.iface.mainWindow())
+        action.triggered.connect(lambda _=False: callback())
+        self.iface.addPluginToMenu(MENU, action)
+        self.actions.append(action)
+        return action
+
+    # -- meddelanden --------------------------------------------------------------
+    def _info(self, text):
+        push(self.iface.messageBar(), TITLE, text, Qgis.MessageLevel.Success)
+
+    def _warn(self, text):
+        push(self.iface.messageBar(), TITLE, text, Qgis.MessageLevel.Warning)

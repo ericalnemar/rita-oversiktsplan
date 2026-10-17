@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="48" height="48" role="img" aria-label="Rita Översiktsplan">
+  <title>Rita Översiktsplan</title>
+  <rect width="200" height="200" rx="28" fill="#16181A"/>
+  <g transform="translate(100 100) scale(0.8) translate(-100 -103)"><polyline points="40,104 74,70 126,70 160,104 160,146 126,180 74,180" fill="none" stroke="#F5F5F2" stroke-width="11" stroke-linejoin="miter"/><polyline points="74,180 40,146 40,104" fill="none" stroke="#E2553A" stroke-width="7" stroke-dasharray="14 10"/><g fill="#16181A" stroke="#F5F5F2" stroke-width="6"><rect x="30" y="94" width="20" height="20"/><rect x="64" y="60" width="20" height="20"/><rect x="116" y="60" width="20" height="20"/><rect x="150" y="94" width="20" height="20"/><rect x="150" y="136" width="20" height="20"/><rect x="116" y="170" width="20" height="20"/><rect x="64" y="170" width="20" height="20"/></g><g fill="#E2553A"><rect x="62" y="16" width="24" height="24"/><rect x="114" y="16" width="24" height="24"/></g></g>
+</svg>

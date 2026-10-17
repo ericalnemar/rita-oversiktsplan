@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.gpkg
+*.gpkg-wal
+*.gpkg-shm
+*.qgz~
+*.qgs~
+.venv/
+dist/
+*.db
+.claude/
+CLAUDE.md
