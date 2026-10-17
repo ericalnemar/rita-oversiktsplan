@@ -11,6 +11,9 @@ och Lantmäteriets [nationella specifikation för översiktsplan](https://www.la
 (testversion), och för att förbereda planen för arkivering. Målgrupp: översiktsplanerare och GIS-ingenjörer hos
 kommuner. Syskonplugin till [Rita Detaljplan](https://github.com/ericalnemar/rita-detaljplan).
 
+En översiktsplan som påbörjas 1 januari 2027 eller senare ska kunna tillgängliggöras och behandlas digitalt
+(plan- och byggförordningen 2 kap. 5 a §). Pluginet gör det arbetet lättare i QGIS.
+
 **Webbsida:** [ritaplan.xyz](https://ritaplan.xyz), om Rita-pluginen.
 
 Öppen källkod, [GPL-2.0-or-later](LICENSE). Gränssnittet är på svenska.
@@ -21,39 +24,27 @@ kommuner. Syskonplugin till [Rita Detaljplan](https://github.com/ericalnemar/rit
 
 ## Vad pluginet gör
 
-En översiktsplan som påbörjas 1 januari 2027 eller senare ska kunna tillgängliggöras och behandlas digitalt
-(plan- och byggförordningen 2 kap. 5 a §). Pluginet gör det arbetet lättare i QGIS.
-
-**Redan nu:**
-
-- **Ny översiktsplan** skapar en GeoPackage med samma tabeller som Boverkets GIS-databasmodell (0.3) och värden ur
-  ÖP-katalogen 2.2, och lägger in planen i kartan med en undergrupp per innehållstyp.
-- **Rita först, tilldela sedan**, som i Rita Detaljplan: rita en yta, linje eller punkt och ge den innehåll med
-  verktyget *Tilldela innehåll*. Geometri som redan finns i ett annat lager kan importeras utan attribut i stället för att
-  ritas om. Det som gäller hela planen (planhändelse, vertikal avgränsning …) ställs in en gång
-  under *Planens uppgifter*. *Avsluta redigering* (disketten) sparar.
-- **Skapa bokmärken i planhandling:** ett eget fönster (som motsvarande program i Rita Detaljplan) där översiktsplanens
-  textavsnitt i Word granskas och kopplas till planens innehåll, genom att klicka i en karta. Avsnitten får bokmärken
-  enligt Boverkets instruktion för texthantering, och kopplingarna sparas i planen. Innehåll som bara beskrivs i text
-  kan läggas in utan geometri.
-- **En symbol per innehållstyp**, med detaljplanens färger för mark- och vattenanvändning och övrigt innehåll som
+- **Ritar planen:** *Ny översiktsplan* skapar en GeoPackage med Boverkets GIS-databasmodell (0.3) och värden ur
+  ÖP-katalogen 2.2. Rita först och tilldela sedan: rita en yta, linje eller punkt och ge den innehåll med verktyget
+  *Tilldela innehåll*. Geometri från andra lager kan importeras i stället för att ritas om, och innehåll kan kopieras
+  från ett objekt till andra.
+- **Innehåll ur ÖP-katalogen:** innehållstyp, kompletterande innehållstyp, planhändelse och sambandsnivå väljs i
+  listor. Det som gäller hela planen ställs in en gång under *Planens uppgifter*. Objektidentitet (UUID),
+  versionsdatum och illustrativa gränser fylls i automatiskt.
+- **Symbologi per innehållstyp** med detaljplanens färger för mark- och vattenanvändning och övrigt innehåll som
   genomskinliga överlägg. Inga mönster, så att symbolerna fungerar i webbkartor (SLD för GeoServer).
-- **Fil eller databas:** planen sparas i en GeoPackage eller i en PostGIS-databas där flera kan arbeta, med
-  utcheckning och incheckning som i Rita Detaljplan.
-- **Samma verktyg som i Rita Detaljplan:** pennan (börja och avsluta redigering), markera och avmarkera, kopiera
-  innehåll från ett objekt till andra, och **export** till Lantmäteriets format för översiktsplan (JSON) med en
-  kontroll av det som saknas.
-- **Kopplingar:** vilket innehåll som berör annat innehåll (klicka i kartan), riksintressets id, och vilket innehåll
+- **Kopplingar:** vilket innehåll som berör annat innehåll (klicka i kartan), riksintressets id och vilket innehåll
   antagandebeslutet gäller.
-- **Leverans till NGP** via Lantmäteriets Uppdatering-API, med valideringsrapporten i en dialog (inte provat mot
-  Lantmäteriet än).
-- **Arkivpaket** med bevarandemetadata (PREMIS) enligt Boverkets specifikation för långtidsbevarande, och en kontroll
-  av att paketet inte ändrats.
-- **Formulär med ÖP-katalogens värden:** innehållstyp, kompletterande innehållstyp, planhändelse och sambandsnivå
-  väljs i listor. Objektidentitet (UUID), versionsdatum och illustrativa gränser fylls i automatiskt.
-
-**Planerat:** att prova leveransen mot Lantmäteriets verifieringsmiljö och att följa specifikationen när den
-fastställs.
+- **Kontrollerar planen** mot Lantmäteriets specifikation för översiktsplan och visar det som saknas.
+- **Levererar till NGP** via Lantmäteriets Uppdatering-API, med valideringsrapporten i en dialog, eller sparar planen
+  som JSON-fil.
+- **Skapar bokmärken i planhandlingen** (Word): ett eget fönster där textavsnitten granskas och kopplas till planens
+  innehåll genom att klicka i en karta. Avsnitten får bokmärken enligt Boverkets instruktion för texthantering.
+  Innehåll som bara beskrivs i text kan läggas in utan geometri.
+- **Förbereder för arkivering:** arkivpaket med bevarandemetadata enligt Boverkets specifikation för
+  långtidsbevarande (PREMIS), och en kontroll av att paketet inte ändrats.
+- **Lagrar planen** i en lokal GeoPackage eller i en PostGIS-databas där flera kan arbeta, med **utcheckning och
+  incheckning** som i Rita Detaljplan.
 
 ## Installera
 
