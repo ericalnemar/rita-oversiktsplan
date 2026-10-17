@@ -307,9 +307,14 @@ class OversiktsplanPlugin:
             return text
 
         errors = sum(1 for p in problems if p.level == export_lm.FEL)
+        plan_id = next((f["properties"].get("objektidentitet") for f in collection["features"]
+                        if f["properties"].get("feature:typ") == "oversiktsplan"), None)
         dialog = ExportDialog(collection, problems, save, lambda table, fid: self._show_feature(group, table, fid),
-                              self.iface.mainWindow(), deliver=lambda: self.deliver_ngp(group, collection, errors),
-                              archive=lambda: self.open_archive(group), settings=self.open_settings)
+                              self.iface.mainWindow(),
+                              deliver=lambda: self.deliver_ngp(group, collection, errors, confirmed=True),
+                              archive=lambda: self.open_archive(group), settings=self.open_settings,
+                              config=lambda: settings.ngp_config(),
+                              resuming=lambda config: self._resuming(group, config, plan_id))
         dialog.exec()
         return dialog
 
@@ -339,9 +344,15 @@ class OversiktsplanPlugin:
     def _make_client(self, config: "ngp.NgpConfig") -> "ngp.NgpClient":  # byts ut i tester
         return ngp.NgpClient(config)
 
-    def deliver_ngp(self, group, collection: dict, errors: int) -> Optional[str]:
-        """Levererar planen till NGP i en bakgrundsuppgift, efter en fråga som säger vart och med vilka fel. En tidigare
-        mottagning som fick valideringsfel återanvänds. Resultatet visas i en egen dialog."""
+    def _resuming(self, group, config, plan_id) -> bool:
+        """Om leveransen fortsätter på den tidigare mottagningen (samma miljö och samma plan)."""
+        last = self.last_delivery(group)
+        return bool(last) and last.get("miljo") == config.environment and last.get("plan") == plan_id
+
+    def deliver_ngp(self, group, collection: dict, errors: int, confirmed: bool = False) -> Optional[str]:
+        """Levererar planen till NGP i en bakgrundsuppgift. Utan ``confirmed`` frågar pluginet först och säger vart och
+        med vilka fel (i dialogen Leverans och export står det redan i leveransrutan). En tidigare mottagning som fick
+        valideringsfel återanvänds. Resultatet visas i en egen dialog."""
         config = settings.ngp_config()
         plan = next((f["properties"] for f in collection["features"]
                      if f["properties"].get("feature:typ") == "oversiktsplan"), {})
@@ -351,11 +362,10 @@ class OversiktsplanPlugin:
                        "export.")
             return None
         last = self.last_delivery(group)
-        resuming = bool(last) and last.get("miljo") == config.environment and last.get("plan") == plan.get(
-            "objektidentitet")
+        resuming = self._resuming(group, config, plan.get("objektidentitet"))
         text = confirmation_text(config, plan.get("planensTitel", ""), plan.get("kommunnamn", ""),
                                  plan.get("kommunkod", ""), errors, resuming)
-        if not self._ask_yes("Leverera till NGP", text, "Leverera"):
+        if not confirmed and not self._ask_yes("Leverera till NGP", text, "Leverera"):
             return None
         client = self._make_client(config)
         existing = last.get("mottagning") if resuming else None

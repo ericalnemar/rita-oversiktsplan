@@ -1,19 +1,19 @@
 <?xml version='1.0' encoding='utf-8'?>
 <plugins>
-  <pyqgis_plugin name="Rita Översiktsplan" version="0.1.1">
+  <pyqgis_plugin name="Rita Översiktsplan" version="0.1.2">
     <description>Draw Swedish comprehensive plans (oversiktsplaner) in QGIS following Boverket's OP model and the national specification</description>
     <about>A plugin for drawing Swedish comprehensive plans (oversiktsplaner) in QGIS following Boverket's regulations BFS 2024:2, the OP catalogue and GIS database model, and the Swedish Land Survey's national specification for comprehensive plans (test version). Creates a plan as a GeoPackage or in a shared PostGIS schema (with check-out and check-in), in SWEREF 99 TM or a local SWEREF 99 zone. Draw or import geometry and assign content from the OP catalogue, with web-safe symbology per content group. Plan details, decision and background documents (underlag) in one dialog. Links the plan document (Word) to the plan's content with bookmarks, with a web version (HTML). Links content that concerns other content, national interest ids and the adoption decision. Exports to the Land Survey's JSON format with a check of what is missing, delivers the plan to the national geodata platform (NGP) and creates an archival package with preservation metadata (PREMIS) following Boverket. The user interface and documentation are in Swedish. Website: https://ritaplan.xyz. Early development version.</about>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
     <qgis_minimum_version>4.0</qgis_minimum_version>
     <qgis_maximum_version>4.99</qgis_maximum_version>
     <homepage>https://ritaplan.xyz</homepage>
-    <file_name>rita_oversiktsplan-0.1.1.zip</file_name>
+    <file_name>rita_oversiktsplan-0.1.2.zip</file_name>
     <icon>https://github.com/ericalnemar/rita-oversiktsplan/raw/main/rita_oversiktsplan/icon.svg</icon>
     <author_name>Eric Alnemar</author_name>
-    <download_url>https://github.com/ericalnemar/rita-oversiktsplan/releases/download/v0.1.1/rita_oversiktsplan-0.1.1.zip</download_url>
+    <download_url>https://github.com/ericalnemar/rita-oversiktsplan/releases/download/v0.1.2/rita_oversiktsplan-0.1.2.zip</download_url>
     <uploaded_by>Eric Alnemar</uploaded_by>
-    <create_date>2026-10-17</create_date>
-    <update_date>2026-10-17</update_date>
+    <create_date>2026-10-18</create_date>
+    <update_date>2026-10-18</update_date>
     <experimental>True</experimental>
     <deprecated>False</deprecated>
     <tracker>https://github.com/ericalnemar/rita-oversiktsplan/issues</tracker>

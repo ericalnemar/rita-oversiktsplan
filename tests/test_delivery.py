@@ -142,14 +142,61 @@ class PluginDeliveryTests(ToolCase):
         asked.assert_not_called()
         self.assertIn("Adress", self.iface.bar.pushMessage.call_args[0][1])
 
-    def test_the_export_dialog_has_the_delivery_archive_and_settings_buttons(self):
+    def test_the_dialog_chooses_delivery_and_delivers_without_asking_again(self):
         def run(dialog):
-            for button in (dialog.deliver_button, dialog.archive_button, dialog.settings_button):
-                self.assertFalse(button.isHidden(), button.text())
+            self.assertTrue(dialog.upload.isEnabled())
+            self.assertEqual(dialog.choice(), "upload")
+            self.assertIn("ÖP 2040", dialog.upload_info.text())
+            self.assertIsNotNone(dialog.run())
             return 0
 
-        with mock.patch.object(ExportDialog, "exec", new=run):
-            self.assertIsNotNone(self.plugin.export_plan())
+        with mock.patch.object(ExportDialog, "exec", new=run), \
+                mock.patch.object(type(self.plugin), "_ask_yes") as asked:
+            self.plugin.export_plan()
+        asked.assert_not_called()
+        self.assertEqual(self.client.calls, [("0484", None)])
+
+    def test_without_settings_the_file_is_chosen_and_the_reason_is_shown(self):
+        self.config = ngp.NgpConfig("egen", "", "", "")
+
+        def run(dialog):
+            self.assertFalse(dialog.upload.isEnabled())
+            self.assertEqual(dialog.choice(), "file")
+            self.assertIn("Adress", dialog.upload_problems.text())
+            self.assertFalse(dialog.settings_button.isHidden())
+            ok = dialog.buttons.button(dialog.buttons.StandardButton.Ok)
+            self.assertEqual(ok.text(), "Spara fil…")
+            dialog.archive_radio.setChecked(True)
+            self.assertEqual(ok.text(), "Skapa arkivpaket…")
+            return 0
+
+        with mock.patch("rita_oversiktsplan.core.settings.ngp_config", return_value=self.config), \
+                mock.patch.object(ExportDialog, "exec", new=run):
+            self.plugin.export_plan()
+
+    def test_production_needs_the_confirmation_box(self):
+        self.config = ngp.environment_config("prod", "test-cfg")
+
+        def run(dialog):
+            ok = dialog.buttons.button(dialog.buttons.StandardButton.Ok)
+            self.assertFalse(ok.isEnabled())
+            dialog.understand.setChecked(True)
+            self.assertTrue(ok.isEnabled())
+            return 0
+
+        with mock.patch("rita_oversiktsplan.core.settings.ngp_config", return_value=self.config), \
+                mock.patch.object(ExportDialog, "exec", new=run):
+            self.plugin.export_plan()
+
+    def test_a_cancelled_save_keeps_the_dialog_open(self):
+        def run(dialog):
+            self.assertIsNone(dialog.save())
+            self.assertFalse(dialog.result.text())
+            return 0
+
+        with mock.patch.object(type(self.plugin), "_ask_export_path", return_value=""), \
+                mock.patch.object(ExportDialog, "exec", new=run):
+            self.plugin.export_plan()
 
 
 if __name__ == "__main__":

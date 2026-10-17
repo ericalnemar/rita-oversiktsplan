@@ -4,6 +4,17 @@ Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/), versi
 
 ## Ej utgivet
 
+## [0.1.2] – dialogen Leverans och export med rutor
+
+- **Dialogen Leverans och export är uppbyggd som i Rita Detaljplan.** Kontrollen står i en egen blå ruta överst, och
+  de tre alternativen ligger i var sin ruta med en förklaring: *Leverera till NGP*, *Spara som JSON-fil* och *Skapa
+  arkivpaket*. Knappen längst ned byter text efter valet (*Leverera*, *Spara fil…*, *Skapa arkivpaket…*), och dialogen
+  stängs när det valda är gjort.
+- **Leveransrutan** säger vart planen skickas, i vilken miljö och med hur många fel. Saknas inställningarna eller
+  kommunen står det i rött, leveransen går inte att välja och knappen *Inställningar…* finns i rutan. I
+  produktionsmiljön krävs en bockruta (*Jag förstår att en godkänd plan publiceras i produktionsmiljön*). Pluginet
+  frågar inte en gång till före leveransen, eftersom samma uppgifter redan står i rutan.
+
 ## [0.1.1] – kopplingar, leverans till NGP och arkivpaket
 
 - **Nytt: Berör annat innehåll** (knappen med två ytor och en blå streckad linje, sist i verktygsfältet). Klicka på ett

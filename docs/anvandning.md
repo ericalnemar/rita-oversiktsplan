@@ -257,10 +257,18 @@ Specifikationen är i testversion. Filen innehåller:
 Värden ur ÖP-katalogen skrivs med katalogens id:n. Otilldelad geometri följer inte med. Ändringar som inte sparats
 kommer med.
 
-Dialogen visar först vad kontrollen hittade: **fel** (det som Lantmäteriets format kräver men som saknas, till exempel
-planhändelse eller en innehållstyp som inte finns i katalogen) och **varningar**. Dubbelklicka på en anmärkning för att
-markera och zooma till objektet. Klicka **Spara som JSON…** för att spara filen. Det går även med fel, men då följer
-filen inte formatet.
+Dialogen är uppbyggd som i Rita Detaljplan. Överst, i en **blå ruta**, står vad kontrollen hittade: **fel** (det som
+Lantmäteriets format kräver men som saknas, till exempel planhändelse eller en innehållstyp som inte finns i katalogen)
+och **varningar**. Dubbelklicka på en anmärkning för att markera och zooma till objektet.
+
+Under den finns tre alternativ, i var sin ruta. Välj ett och klicka på knappen längst ned, som byter text efter valet:
+
+- **Leverera till NGP** (knappen *Leverera*), se nedan.
+- **Spara som JSON-fil** (knappen *Spara fil…*). Det går även med fel, men då följer filen inte formatet.
+- **Skapa arkivpaket** (knappen *Skapa arkivpaket…*), se nedan.
+
+När det valda är gjort stängs dialogen. Avbryter du, till exempel när du väljer var filen ska sparas, ligger dialogen
+kvar.
 
 Formatet kräver att planen har minst ett **underlag**; lägg till det under *Planens uppgifter*, fliken *Underlag*.
 
@@ -272,20 +280,23 @@ rörs inte. I exporten räknar beslutet upp planen och det innehåll det gäller
 
 ### Leverera till NGP
 
-**Leverera till NGP…** skickar planen till Nationella geodataplattformen via Lantmäteriets Uppdatering-API, på samma
-sätt som i Rita Detaljplan. Först krävs inställningar: klicka **Inställningar…** (eller *Insticksprogram → Rita
+**Leverera till NGP** skickar planen till Nationella geodataplattformen via Lantmäteriets Uppdatering-API, på samma
+sätt som i Rita Detaljplan. Först krävs inställningar: klicka **Inställningar…** i leveransrutan (eller *Insticksprogram → Rita
 Översiktsplan → Inställningar för leverans till NGP…*) och välj miljö (Lantmäteriets **verifieringsmiljö**, som man
 provar i, eller **produktion**) och en autentiseringskonfiguration i QGIS med nyckeln och hemligheten från
 Lantmäteriets API-portal. Kommunen måste ha behörighet som producent för översiktsplan.
 
-Pluginet frågar innan något skickas, och säger vart planen skickas och hur många fel kontrollen hittade. Leveransen
+Saknas inställningarna, eller kommunen i planens uppgifter, går leveransen inte att välja och rutan säger vad som
+saknas; då är *Spara som JSON-fil* förvalt. Annars säger rutan vart planen skickas och hur många fel kontrollen
+hittade. I **produktionsmiljön** måste du också kryssa i *Jag förstår att en godkänd plan publiceras i
+produktionsmiljön* innan knappen *Leverera* går att klicka på. Leveransen
 sker i bakgrunden; när Lantmäteriet validerat planen visas resultatet med **valideringsrapporten** (det som inte gick
 igenom, med Lantmäteriets egna texter). Får planen valideringsfel rättar du dem och levererar igen: planen skickas då
 på samma mottagning hos Lantmäteriet.
 
 ### Arkivpaket
 
-**Skapa arkivpaket…** (i dialogen eller i menyn) samlar planen och handlingarna i en mapp med bevarandemetadata enligt
+**Skapa arkivpaket** (i dialogen eller *Skapa arkivpaket…* i menyn) samlar planen och handlingarna i en mapp med bevarandemetadata enligt
 Boverkets specifikation *Långtidsbevarande och arkivering av översiktsplan och detaljplan*:
 
 - `oversiktsplan.xml`: planens uppgifter (titel, kommun, planhändelse, diarienummer, datum),
