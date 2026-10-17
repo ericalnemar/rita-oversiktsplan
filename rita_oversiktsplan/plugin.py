@@ -8,20 +8,26 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from qgis.core import Qgis, QgsPointXY, QgsProject, QgsRectangle, QgsVectorLayer
-from qgis.PyQt.QtCore import QTimer
+import json
+
+from qgis.core import Qgis, QgsApplication, QgsPointXY, QgsProject, QgsRectangle, QgsTask, QgsVectorLayer
+from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtGui import QCursor, QIcon
-from qgis.PyQt.QtWidgets import QAction, QFileDialog, QMenu, QMessageBox
+from qgis.PyQt.QtWidgets import QAction, QApplication, QFileDialog, QMenu, QMessageBox
 from qgis.PyQt import sip
 
-from .core import checkout, content, editing, export_lm, geopackage, importer, model, storage, underlag
+from .core import (archive, checkout, content, editing, export_lm, geopackage, importer, model, relations, settings,
+                   storage, underlag)
+from .core import ngp_client as ngp
 from .core.project import (PlanError, active_plan_group, draft_layers, is_read_only, layer_in_group, load_plan,
                            plan_groups, plan_storage)
 from .gui.about_dialog import AboutDialog
+from .gui.archive_dialog import ArchiveDialog, build_archive
 from .gui.assign_dialog import AssignDialog
 from .gui.assign_tool import AssignTool
 from .gui.checkout_actions import CheckoutActions
 from .gui.copy_tool import CopyTool
+from .gui.delivery_dialog import DeliveryDialog, confirmation_text
 from .gui.export_dialog import ExportDialog
 from .gui.import_dialog import ImportDialog
 from .gui.messages import push
@@ -29,6 +35,7 @@ from .gui.new_plan_dialog import DATABASE, NewPlanDialog
 from .gui.plan_info_dialog import PlanInfoDialog
 from .gui.postgis_plan_dialog import PostgisPlanDialog
 from .gui.select_tool import SelectTool
+from .gui.settings_dialog import SettingsDialog
 from .gui.toolbar import PlanToolBar, icon
 
 MENU = "&Rita Översiktsplan"
@@ -45,7 +52,9 @@ class OversiktsplanPlugin:
         self.map_tools: dict = {}  # kartverktygen (assign, select, copy), skapas när de används första gången
         self.copy_source: Optional[content.Candidate] = None  # Kopiera innehåll: objektet man kopierar från
         self.copy_assignment: Optional[content.Assignment] = None
+        self.relate_source: Optional[content.Candidate] = None  # Berör annat innehåll: innehållet man utgår från
         self.document_window = None  # programmet Skapa bokmärken i planhandling, om det är öppet
+        self._tasks: list = []  # leveranser till NGP som pågår i bakgrunden
         self.checkout = CheckoutActions(lambda text, warning: (self._warn if warning else self._info)(text),
                                         iface.mainWindow(), after=self.refresh_tools)
 
@@ -70,7 +79,10 @@ class OversiktsplanPlugin:
         self._add_action("Öppna översiktsplan…", self.open_plan, icon("open.svg"))
         self._add_action("Importera geometri…", self.import_geometry, icon("import.svg"))
         self._add_action("Planens uppgifter…", self.open_info, icon("info.svg"))
-        self._add_action("Exportera…", self.export_plan, icon("export.svg"))
+        self._add_action("Leverans och export…", self.export_plan, icon("export.svg"))
+        self._add_action("Skapa arkivpaket…", self.open_archive)
+        self._add_action("Kontrollera arkivpaket…", self.verify_archive)
+        self._add_action("Inställningar för leverans till NGP…", self.open_settings)
         self._add_action("Skapa bokmärken i planhandling…", self.open_document, icon("planhandling.svg"))
         self._add_action("Spara alla redigeringar", self.save_all, icon("save.svg"))
         self.iface.addPluginToMenu(MENU, self._separator())
@@ -220,7 +232,7 @@ class OversiktsplanPlugin:
         group = active_plan_group(QgsProject.instance(), self.iface.activeLayer())
         is_editing = group is not None and editing.is_editing(group)
         if not is_editing:
-            for name in ("assign", "copy"):
+            for name in ("assign", "copy", "relate"):
                 if name in self.map_tools:
                     self._set_tool(name, False)
         self.toolbar.set_state(group is not None, is_editing,
@@ -266,7 +278,7 @@ class OversiktsplanPlugin:
         self._info("Sparade planens uppgifter." + (f" {changed} objekt fick planens planhändelse." if changed else ""))
 
     def export_plan(self) -> Optional[ExportDialog]:
-        """Exportera: kontrollerar planen och sparar den i Lantmäteriets format (JSON). Planen läses med osparade
+        """Leverans och export: kontrollerar planen och sparar, levererar eller arkiverar den. Planen läses med osparade
         ändringar."""
         group = self._group()
         if group is None:
@@ -294,10 +306,138 @@ class OversiktsplanPlugin:
             self._info(text)
             return text
 
+        errors = sum(1 for p in problems if p.level == export_lm.FEL)
         dialog = ExportDialog(collection, problems, save, lambda table, fid: self._show_feature(group, table, fid),
-                              self.iface.mainWindow())
+                              self.iface.mainWindow(), deliver=lambda: self.deliver_ngp(group, collection, errors),
+                              archive=lambda: self.open_archive(group), settings=self.open_settings)
         dialog.exec()
         return dialog
+
+    # -- NGP och arkiv ------------------------------------------------------------------
+    NGP_PROPERTY = "rita_oversiktsplan/ngp"  # på planens grupp: senaste leveransen (mottagning, plan, miljö) som JSON
+
+    def last_delivery(self, group) -> dict:
+        try:
+            return json.loads(group.customProperty(self.NGP_PROPERTY) or "{}")
+        except ValueError:
+            return {}
+
+    def remember_delivery(self, group, reception: str, plan: str, environment: str) -> None:
+        group.setCustomProperty(self.NGP_PROPERTY, json.dumps({"mottagning": reception, "plan": plan,
+                                                               "miljo": environment}))
+
+    def _ask_yes(self, title: str, text: str, yes: str) -> bool:  # byts ut i tester
+        box = QMessageBox(self.iface.mainWindow())
+        box.setWindowTitle(title)
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText(text)
+        ok = box.addButton(yes, QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Avbryt", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        return box.clickedButton() is ok
+
+    def _make_client(self, config: "ngp.NgpConfig") -> "ngp.NgpClient":  # byts ut i tester
+        return ngp.NgpClient(config)
+
+    def deliver_ngp(self, group, collection: dict, errors: int) -> Optional[str]:
+        """Levererar planen till NGP i en bakgrundsuppgift, efter en fråga som säger vart och med vilka fel. En tidigare
+        mottagning som fick valideringsfel återanvänds. Resultatet visas i en egen dialog."""
+        config = settings.ngp_config()
+        plan = next((f["properties"] for f in collection["features"]
+                     if f["properties"].get("feature:typ") == "oversiktsplan"), {})
+        problems = ([] if plan.get("kommunkod") else ["Kommunkoden saknas i planen."]) + config.problems()
+        if problems:
+            self._warn("Leverans till NGP: " + " ".join(problems) + " Öppna Inställningar i dialogen Leverans och "
+                       "export.")
+            return None
+        last = self.last_delivery(group)
+        resuming = bool(last) and last.get("miljo") == config.environment and last.get("plan") == plan.get(
+            "objektidentitet")
+        text = confirmation_text(config, plan.get("planensTitel", ""), plan.get("kommunnamn", ""),
+                                 plan.get("kommunkod", ""), errors, resuming)
+        if not self._ask_yes("Leverera till NGP", text, "Leverera"):
+            return None
+        client = self._make_client(config)
+        existing = last.get("mottagning") if resuming else None
+        self._info("Levererar planen till NGP i bakgrunden …")
+
+        def work(progress):
+            return client.deliver(collection, plan["kommunkod"], existing, progress)
+
+        def done(exception, result=None):
+            if exception is not None:
+                message = str(exception) if isinstance(exception, ngp.NgpError) else \
+                    f"{type(exception).__name__}: {exception}"
+                self._warn(f"Leveransen till NGP misslyckades. {message}")
+                return
+            self.remember_delivery(group, result.mottagningsid, result.plan_id, config.environment)
+            (self._info if result.ok else self._warn)(f"Leveransen till NGP ({config.title}) fick status "
+                                                      f"{result.status.typ}.")
+            DeliveryDialog(result, config.title, lambda: client.refresh(result.mottagningsid, result.plan_id),
+                           self.iface.mainWindow()).exec()
+
+        self._run_delivery(work, done)
+        return "Leveransen till NGP pågår i bakgrunden. Resultatet visas när den är klar."
+
+    def _run_delivery(self, work, done) -> None:
+        """Kör ``work(progress)`` i en bakgrundsuppgift och anropar ``done(exception, result)`` i huvudtråden."""
+        holder = {}
+
+        def run(task):
+            return work(lambda text: task.setDescription(f"Levererar till NGP: {text}"))
+
+        def finished(exception, result=None):
+            self._tasks = [t for t in self._tasks if t is not holder.get("task")]
+            done(exception, result)
+
+        task = QgsTask.fromFunction("Levererar översiktsplanen till NGP", run, on_finished=finished)
+        holder["task"] = task
+        self._tasks.append(task)
+        QgsApplication.taskManager().addTask(task)
+
+    def open_settings(self) -> None:
+        SettingsDialog(self.iface.mainWindow()).exec()
+
+    def open_archive(self, group=None) -> Optional[str]:
+        """Skapar ett arkivpaket med bevarandemetadata (se ``core.archive``). Returnerar en text om resultatet."""
+        group = group or self._group()
+        if group is None:
+            return None
+        dialog = ArchiveDialog(group, self.iface.mainWindow())
+        if not dialog.exec():
+            return None
+        QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+        try:
+            package = build_archive(group, dialog.options())
+        except archive.ArchiveError as exc:
+            self._warn(str(exc))
+            return None
+        finally:
+            QApplication.restoreOverrideCursor()
+        text = f"Arkivpaketet {package.folder.name} är skapat med {len(package.records)} filer i {package.folder.parent}."
+        self._info(text)
+        if package.notes:
+            self._warn("Att tänka på: " + " ".join(package.notes))
+        return text
+
+    def verify_archive(self) -> Optional["archive.VerifyReport"]:
+        """Räknar om kontrollsummorna i ett arkivpaket och visar om något ändrats."""
+        home = QgsProject.instance().homePath() or ""
+        chosen = QFileDialog.getExistingDirectory(self.iface.mainWindow(), "Välj arkivpaketets mapp", home)
+        if not chosen:
+            return None
+        try:
+            report = archive.verify_package(Path(chosen))
+        except archive.ArchiveError as exc:
+            self._warn(str(exc))
+            return None
+        box = QMessageBox(self.iface.mainWindow())
+        box.setWindowTitle("Kontrollera arkivpaket")
+        box.setIcon(QMessageBox.Icon.Information if report.clean else QMessageBox.Icon.Warning)
+        box.setText("Arkivpaketet är oförändrat." if report.clean else "Arkivpaketet skiljer sig från hur det skapades.")
+        box.setInformativeText(report.text())
+        box.exec()
+        return report
 
     def _ask_export_path(self, suggestion: str) -> str:
         path, _ = QFileDialog.getSaveFileName(self.iface.mainWindow(), "Spara översiktsplanen som JSON", suggestion,
@@ -423,6 +563,8 @@ class OversiktsplanPlugin:
             action.blockSignals(False)
         if name == "copy" and not on:
             self.reset_copy_source()
+        if name == "relate" and not on:
+            self.reset_relate_source()
 
     def set_assigning(self, on: bool):
         """Slår på eller av verktyget Tilldela innehåll."""
@@ -444,6 +586,15 @@ class OversiktsplanPlugin:
         self._set_tool("copy", on, lambda canvas: CopyTool(canvas, self.copy_at, self.reset_copy_source))
         if on and "copy" in self.map_tools:
             self._info("Kopiera innehåll: klicka på objektet du vill kopiera från.")
+
+    def set_relating(self, on: bool):
+        """Slår på eller av verktyget Berör annat innehåll."""
+        if on and not self._tool_allowed():
+            self._set_checked("relate", False)
+            return
+        self._set_tool("relate", on, lambda canvas: CopyTool(canvas, self.relate_at, self.reset_relate_source))
+        if on and "relate" in self.map_tools:
+            self._info("Berör annat innehåll: klicka på innehållet du utgår från.")
 
     def _tool_allowed(self) -> bool:
         group = active_plan_group(QgsProject.instance(), self.iface.activeLayer())
@@ -534,6 +685,74 @@ class OversiktsplanPlugin:
         tool = self.map_tools.get("copy")
         if tool is not None:
             tool.show_source(None)
+
+    # -- berör annat innehåll -----------------------------------------------------------
+    def reset_relate_source(self) -> None:
+        self.relate_source = None
+        tool = self.map_tools.get("relate")
+        if tool is not None:
+            tool.show_source(None)
+            tool.show_targets([])
+
+    def _show_related(self, group) -> None:
+        tool, source = self.map_tools.get("relate"), self.relate_source
+        if tool is None or source is None:
+            return
+        wanted = relations.related(group, source.layer, source.fid)
+        found = []
+        for layer_def in model.CONTENT_LAYERS:
+            layer = layer_in_group(group, layer_def.name)
+            if layer is None:
+                continue
+            for feature in layer.getFeatures():
+                if str(content.plain(feature["objektidentitet"])) in wanted and feature.hasGeometry():
+                    found.append((feature.geometry(), layer))
+        tool.show_targets(found)
+
+    def relate_at(self, point: QgsPointXY, tolerance: float) -> Optional[bool]:
+        """Första klicket väljer innehållet man utgår från, nästa klick kopplar (eller kopplar loss) innehållet det
+        berör. Returnerar True/False för kopplat/loss, eller None när källan valdes eller inget hände."""
+        group = self._group()
+        if group is None:
+            return None
+        source = self.relate_source
+        if source is not None and not source.layer.getFeature(source.fid).isValid():
+            self.reset_relate_source()
+            source = None
+        assigned = [c for c in content.candidates_at(group, point, tolerance) if c.assigned]
+        if source is None:
+            if not assigned:
+                self._warn("Klicka på ett innehåll (otilldelad geometri kan inte beröra något).")
+                return None
+            chosen = assigned[0] if len(assigned) == 1 else self.choose_candidate(assigned)
+            if chosen is None:
+                return None
+            self.relate_source = chosen
+            tool = self.map_tools.get("relate")
+            if tool is not None:
+                tool.show_source(chosen.layer.getFeature(chosen.fid).geometry(), chosen.layer)
+            self._show_related(group)
+            count = len(relations.related(group, chosen.layer, chosen.fid))
+            self._info(f"{chosen.label()} berör {count} annat innehåll. Klicka på innehåll för att koppla eller "
+                       "koppla loss.")
+            return None
+        targets = [c for c in assigned if not (c.layer is source.layer and c.fid == source.fid)]
+        if not targets:
+            self._warn("Klicka på ett annat innehåll.")
+            return None
+        target = targets[0] if len(targets) == 1 else self.choose_candidate(targets)
+        if target is None:
+            return None
+        identity = str(content.plain(target.layer.getFeature(target.fid)["objektidentitet"]))
+        try:
+            linked = relations.toggle(group, source.layer, source.fid, identity)
+        except ValueError as exc:
+            self._warn(str(exc))
+            return None
+        self._show_related(group)
+        self._info(("Kopplat: " if linked else "Kopplingen är borttagen: ") + target.label()
+                   + ". Spara med Avsluta redigering (disketten).")
+        return linked
 
     def copy_at(self, point: QgsPointXY, tolerance: float) -> bool:
         """Första klicket väljer objektet att kopiera från, nästa klick ger ett annat objekt samma innehåll. Returnerar

@@ -102,7 +102,8 @@ class PluginTests(unittest.TestCase):
     def test_the_menu_offers_the_commands_the_toolbar_toggle_and_the_about_dialog(self):
         texts = [a.text() for a in self.iface.menus[MENU].actions() if not a.isSeparator()]
         self.assertEqual(texts, ["Ny översiktsplan…", "Öppna översiktsplan…", "Importera geometri…", "Planens uppgifter…",
-                                 "Exportera…", "Skapa bokmärken i planhandling…", "Spara alla redigeringar", "Rita Översiktsplan",
+                                 "Leverans och export…", "Skapa arkivpaket…", "Kontrollera arkivpaket…",
+                                 "Inställningar för leverans till NGP…", "Skapa bokmärken i planhandling…", "Spara alla redigeringar", "Rita Översiktsplan",
                                  "Om Rita Översiktsplan…"])
 
     def test_the_toolbar_has_plan_draw_assign_info_and_save_buttons(self):
@@ -111,9 +112,9 @@ class PluginTests(unittest.TestCase):
         texts = [a.text() for a in toolbar.actions() if not a.isSeparator()]
         self.assertEqual(texts, ["Ny översiktsplan…", "Öppna översiktsplan…", "Checka ut", "Börja redigera",
                                  "Avsluta redigering",
-                                 "Planens uppgifter", "Exportera", "Skapa bokmärken i planhandling", "Markera", "Avmarkera alla",
-                                 "Rita yta", "Rita linje", "Rita punkt", "Importera geometri", "Tilldela innehåll",
-                                 "Kopiera innehåll"])
+                                 "Planens uppgifter", "Leverans och export", "Skapa bokmärken i planhandling", "Markera",
+                                 "Avmarkera alla", "Rita yta", "Rita linje", "Rita punkt", "Importera geometri",
+                                 "Tilldela innehåll", "Kopiera innehåll", "Berör annat innehåll"])
         for action in toolbar.actions():
             if not action.isSeparator():
                 self.assertFalse(action.icon().isNull(), action.text())
@@ -430,6 +431,8 @@ class AboutDialogTests(unittest.TestCase):
         self.assertIn("översiktsplaner", dialog.tagline.text())
         self.assertEqual(dialog.docs_url(),
                          "https://github.com/ericalnemar/rita-oversiktsplan/blob/main/docs/anvandning.md")
+        self.assertEqual(dialog.homepage, "https://ritaplan.xyz")
+        self.assertFalse(dialog.website.isHidden())
 
 
 class NewPlanDialogTests(unittest.TestCase):

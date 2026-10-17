@@ -39,6 +39,11 @@ class AssignDialog(QDialog):
         self.precisering.setPlaceholderText("Kommunens precisering av innehållet (valfritt)")
         self.precisering.setFixedHeight(4 * self.precisering.fontMetrics().lineSpacing() + 14)
         self.utbyggnadsordning = QLineEdit()
+        self.riksintresse = QLineEdit()
+        self.riksintresse.setPlaceholderText("Id hos den myndighet som pekat ut riksintresset (valfritt)")
+        self.riksintresse.setToolTip("Riksintressets identitet i den ansvariga myndighetens data, till exempel "
+                                     "Naturvårdsverkets eller Trafikverkets. Följer med i exporten som en extern "
+                                     "referens.")
         self.description = QLabel()
         self.description.setWordWrap(True)
         self.description.setEnabled(False)  # dämpad färg
@@ -52,6 +57,7 @@ class AssignDialog(QDialog):
         self.form.addRow("Namn", self.namn)
         self.form.addRow("Precisering", self.precisering)
         self.form.addRow("Utbyggnadsordning", self.utbyggnadsordning)
+        self.form.addRow("Riksintressets id", self.riksintresse)
         note = QLabel("Planhändelse, vertikal avgränsning och andra uppgifter som gäller allt innehåll ställs in "
                       "under Planens uppgifter.")
         note.setWordWrap(True)
@@ -97,7 +103,8 @@ class AssignDialog(QDialog):
         # vattenanvändning och Utvecklingsinriktning har en kompletterande lista i ÖP-katalogen.
         self.form.setRowVisible(self.complement, category.kompletterande is not None)
         for widget, field in ((self.sambandsniva, "sambandsniva_varde"), (self.precisering, "precisering"),
-                              (self.utbyggnadsordning, "utbyggnadsordning")):
+                              (self.utbyggnadsordning, "utbyggnadsordning"),
+                              (self.riksintresse, "objektidentitet_ri")):
             self.form.setRowVisible(widget, self._has(field))
         self._on_value()
 
@@ -125,6 +132,7 @@ class AssignDialog(QDialog):
         self.namn.setText(str(current.get("namn") or ""))
         self.precisering.setPlainText(str(current.get("precisering") or ""))
         self.utbyggnadsordning.setText(str(current.get("utbyggnadsordning") or ""))
+        self.riksintresse.setText(str(current.get("objektidentitet_ri") or ""))
 
     # -- resultat -----------------------------------------------------------------------
     def assignment(self) -> Assignment:
@@ -138,4 +146,6 @@ class AssignDialog(QDialog):
             values["precisering"] = self.precisering.toPlainText().strip() or None
         if self._has("utbyggnadsordning"):
             values["utbyggnadsordning"] = self.utbyggnadsordning.text().strip() or None
+        if self._has("objektidentitet_ri"):
+            values["objektidentitet_ri"] = self.riksintresse.text().strip() or None
         return Assignment(self.category(), values)

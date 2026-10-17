@@ -198,6 +198,21 @@ def read_only_uri(path: str | Path) -> str:
     return ("file:////" + posix.lstrip("/") if posix.startswith("//") else f"file:{posix}") + "?mode=ro"
 
 
+def snapshot(path: str | Path, target: str | Path) -> Path:
+    """Kopierar en GeoPackage till ``target`` som en konsekvent ögonblicksbild (SQLites backup), även medan QGIS har
+    filen öppen. Originalet öppnas skrivskyddat och rörs inte. Från Rita Detaljplan."""
+    source = sqlite3.connect(read_only_uri(path), uri=True)
+    try:
+        copy = sqlite3.connect(str(target))
+        try:
+            source.backup(copy)
+        finally:
+            copy.close()
+    finally:
+        source.close()
+    return Path(target)
+
+
 def read_meta(path: str | Path) -> dict[str, str]:
     """Pluginets metadata i filen, eller en tom ordbok om filen inte är en översiktsplan skapad av pluginet."""
     try:

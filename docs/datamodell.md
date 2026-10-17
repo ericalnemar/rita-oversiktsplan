@@ -69,3 +69,12 @@ med `python tools/update_opkatalog.py`. Text och bild i API:et omfattas av CC0 e
 När en plan skapas kopieras katalogens värden in i planens uppslagstabeller. Planen behåller sedan den
 katalogversionen, även om pluginet senare får en nyare katalog. Boverket säger att en plan får fortsätta i den
 katalogversion som arbetet påbörjades i.
+
+## Kopplingar (0.1.1)
+
+- **Berör annat innehåll:** innehållets `beror_annat_innehall_id` (ett UUID som pluginet sätter första gången) pekar på
+  rader i `innehall_op_beror_annat_innehall`, en per berört innehåll, med det berördas objektidentitet i
+  `beror_annat_innehal_uuid` (mallens stavning).
+- **Riksintressets id** sparas i `objektidentitet_ri` i lagren för riksintressen.
+- **Beslut:** innehållets `beslut` får antagandebeslutets objektidentitet när beslutet sparas, om fältet är tomt.
+

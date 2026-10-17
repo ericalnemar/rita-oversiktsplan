@@ -31,7 +31,7 @@ class MetadataTests(unittest.TestCase):
     def test_name_author_and_the_links_point_at_this_project(self):
         self.assertEqual(self.meta["name"], "Rita Översiktsplan")
         self.assertEqual(self.meta["author"], "Eric Alnemar")
-        self.assertEqual(self.meta["homepage"], REPO_URL)
+        self.assertEqual(self.meta["homepage"], "https://ritaplan.xyz")
         self.assertEqual(self.meta["repository"], REPO_URL)
         self.assertEqual(self.meta["tracker"], REPO_URL + "/issues")
 
@@ -124,7 +124,9 @@ class ZipTests(unittest.TestCase):
                      "gui/copy_tool.py", "gui/export_dialog.py", "icons/start.svg", "icons/stop.svg",
                      "icons/select.svg", "icons/deselect.svg", "icons/copy.svg", "icons/export.svg",
                      "icons/import.svg", "core/storage.py", "core/checkout.py", "gui/checkout_actions.py",
-                     "gui/postgis_plan_dialog.py", "icons/checkout.svg", "icons/checkin.svg", "core/underlag.py"):
+                     "gui/postgis_plan_dialog.py", "icons/checkout.svg", "icons/checkin.svg", "core/underlag.py",
+                     "core/archive.py", "core/relations.py", "core/ngp_client.py", "core/settings.py",
+                     "gui/archive_dialog.py", "gui/delivery_dialog.py", "gui/settings_dialog.py", "icons/relate.svg"):
             self.assertIn(f"rita_oversiktsplan/{name}", self.names)
 
     def test_development_files_and_caches_are_left_out(self):

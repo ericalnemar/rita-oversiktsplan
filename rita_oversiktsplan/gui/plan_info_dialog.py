@@ -135,7 +135,8 @@ class PlanInfoDialog(QDialog):
         self.laga_kraft = OptionalDate("Datum", decision.laga_kraft)
         note = QLabel("Antagandebeslutet. Boverkets föreskrifter (BFS 2024:2, 2 kap. 2 §) kräver att översiktsplanen "
                       "redovisar antagandebeslutets diarienummer och datum när beslutet fick laga kraft. Fyll i dem "
-                      "när planen är antagen.")
+                      "när planen är antagen. Beslutet gäller planen och allt innehåll som inte redan hör till ett "
+                      "annat beslut.")
         note.setWordWrap(True)
         note.setEnabled(False)
         page = QWidget()

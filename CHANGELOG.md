@@ -4,6 +4,32 @@ Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/), versi
 
 ## Ej utgivet
 
+## [0.1.1] – kopplingar, leverans till NGP och arkivpaket
+
+- **Nytt: Berör annat innehåll** (knappen med två ytor och en blå streckad linje, sist i verktygsfältet). Klicka på ett
+  innehåll och sedan på det innehåll det berör, till exempel en klimatrisk som berör ett bostadsområde. Klicka igen för
+  att ta bort kopplingen. Det berörda visas i blått. Kopplingarna sparas i Boverkets tabell
+  `innehall_op_beror_annat_innehall` och följer med i exporten som `berorAnnatInnehall`.
+- **Riksintressets id:** för riksintressen (kommunens ställningstagande och enligt 3 och 4 kap. MB) finns fältet
+  *Riksintressets id* i Tilldela innehåll. Det blir en extern referens (`externReferens`) i exporten.
+- **Beslutet gäller innehållet:** när antagandebeslutet sparas under Planens uppgifter får allt innehåll som inte
+  redan hör till ett annat beslut beslutets id, och beslutet räknar upp planen och innehållet (`paverkar`) i exporten.
+- **Nytt: Leverans och export** (tidigare *Exportera*): samma kontroll och *Spara som JSON…*, och nya knappar
+  **Leverera till NGP…**, **Skapa arkivpaket…** och **Inställningar…**.
+- **Leverans till NGP** via Lantmäteriets Uppdatering-API, på samma sätt som i Rita Detaljplan: en fråga som säger
+  vart planen skickas och hur många fel kontrollen hittade, leveransen i bakgrunden och sedan Lantmäteriets
+  valideringsrapport. Efter ett valideringsfel skickas planen igen på samma mottagning. Inställningar för miljö
+  (verifiering, produktion eller egen adress) och inloggning under *Insticksprogram → Rita Översiktsplan →
+  Inställningar för leverans till NGP…*. **Inte provat mot Lantmäteriet**, se Kända begränsningar.
+- **Arkivpaket med bevarandemetadata** enligt Boverkets specifikation för långtidsbevarande (som Boverket säger kan
+  användas för översiktsplan "med mindre anpassningar"): en mapp med `oversiktsplan.xml` (planens uppgifter),
+  `metadata/PREMIS.xml` (filerna med kontrollsummor, händelser och aktörer) och `content/` med planens GeoPackage,
+  exportfilen, planhandlingen med bokmärken och dess webbversion, underlagens filer och de dokument du själv lägger
+  till. **Kontrollera arkivpaket…** räknar om kontrollsummorna och säger om något ändrats. Pluginet gör inga filer
+  till PDF/A, som i Rita Detaljplan.
+- **Webbsidan [ritaplan.xyz](https://ritaplan.xyz)** är pluginets hemsida i QGIS pluginhanterare, och Om Rita
+  Översiktsplan har en knapp *Webbsida*. Handledningen och felrapporter ligger kvar på GitHub.
+
 ## [0.1.0] – första utgåvan
 
 Första förhandsversionen. **Arbete pågår med hur planen visas i kartan**: symbologin (färger, kantlinjer och

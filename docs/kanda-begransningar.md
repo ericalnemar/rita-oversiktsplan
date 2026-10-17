@@ -8,14 +8,21 @@ under [Issues](https://github.com/ericalnemar/rita-oversiktsplan/issues).
 - **Kartbilden är inte färdig.** Arbete pågår med hur planen visas i kartan: symbologin (färger, kantlinjer och punktsymboler per innehållstyp) och presentationen i övrigt kommer att ändras. Se [Symbologi](symbologi.md).
 - **Kontroll mot specifikationen.** Exporten kontrollerar att det som Lantmäteriets format kräver finns, men inte
   Lantmäteriets valideringsregler i NGP (de är inte genomgångna än).
-- **Leverans** till Nationella geodataplattformen (NGP). Exporten till Lantmäteriets JSON-format finns, men är inte
-  validerad mot Lantmäteriets schema eller provad i NGP, och specifikationen är i testversion.
+- **Leverans till NGP är inte provad mot Lantmäteriet.** Klienten är kopierad från Rita Detaljplan och testad mot en
+  låtsasserver som beter sig som Uppdatering-API:et. Att informationstypen heter `oversiktsplan` och att
+  mediatypen `application/vnd.lm.oversiktsplan.v2+json` tas emot är antaganden utifrån Lantmäteriets
+  specifikationssida. Exporten är inte validerad mot Lantmäteriets schema, och specifikationen är i testversion.
+  Prova i verifieringsmiljön först.
 - **Tolkningar i exporten:** hur dokumentens externa referens ska fyllas i (identitet, producentens identitet,
   tidsstämpel, vad den avser) säger schemat inte, se `core/export_lm.py`. Länkar till dokument tas bara med om de är
-  webbadresser. *Berör annat innehåll* och externa referenser till riksintressen följer inte med.
-- **Arkivpaket.**
-- **Kopplingar som du själv måste sköta:** underlag, *berör annat innehåll* och externa referenser till riksintressen
-  fylls inte i av pluginet. Tabellerna finns, men det finns inga verktyg för dem än.
+  webbadresser. Riksintressets id blir en extern referens med samma värde som identitet och producentens
+  identitet, och tidsstämpeln är *hämtat datum* (eller innehållets versionsdatum): det är tolkningar.
+- **Beslut:** pluginet hanterar ett beslut, antagandet. Senare ändringar med egna beslut får man sköta i tabellen
+  `beslut_op` och fältet *beslut* själv.
+- **Arkivpaketet** följer Boverkets mallar, som avviker från PREMIS egen schemafil; paketet är inte validerat mot
+  schemat. Planens uppgifter ligger i en `objectCharacteristicsExtension` (Boverket anger inte hur). Datum skrivs som i
+  mallarna. Pluginet gör inga filer till PDF/A och kontrollerar dem inte. Paketet sparas som en mapp, inte i ett
+  e-arkiv.
 - **Planhandlingen** delas in i avsnitt efter rubrikformaten. Text utan rubrik ovanför och delar av ett avsnitt kan inte
   få egna bokmärken, och flera avsnitt kan inte slås ihop till ett bokmärke. Ett dokument åt gången är öppet i Skapa
   bokmärken i planhandling (flera går, men de hålls isär efter filnamn). Det finns ingen granskningskopia med kommentarer, som i

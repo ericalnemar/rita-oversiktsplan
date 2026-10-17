@@ -11,6 +11,8 @@ och Lantmäteriets [nationella specifikation för översiktsplan](https://www.la
 (testversion), och för att förbereda planen för arkivering. Målgrupp: översiktsplanerare och GIS-ingenjörer hos
 kommuner. Syskonplugin till [Rita Detaljplan](https://github.com/ericalnemar/rita-detaljplan).
 
+**Webbsida:** [ritaplan.xyz](https://ritaplan.xyz), om Rita-pluginen.
+
 Öppen källkod, [GPL-2.0-or-later](LICENSE). Gränssnittet är på svenska.
 
 > **Tidig utvecklingsversion.** Läs [Kända begränsningar](docs/kanda-begransningar.md).
@@ -41,14 +43,17 @@ En översiktsplan som påbörjas 1 januari 2027 eller senare ska kunna tillgäng
 - **Samma verktyg som i Rita Detaljplan:** pennan (börja och avsluta redigering), markera och avmarkera, kopiera
   innehåll från ett objekt till andra, och **export** till Lantmäteriets format för översiktsplan (JSON) med en
   kontroll av det som saknas.
+- **Kopplingar:** vilket innehåll som berör annat innehåll (klicka i kartan), riksintressets id, och vilket innehåll
+  antagandebeslutet gäller.
+- **Leverans till NGP** via Lantmäteriets Uppdatering-API, med valideringsrapporten i en dialog (inte provat mot
+  Lantmäteriet än).
+- **Arkivpaket** med bevarandemetadata (PREMIS) enligt Boverkets specifikation för långtidsbevarande, och en kontroll
+  av att paketet inte ändrats.
 - **Formulär med ÖP-katalogens värden:** innehållstyp, kompletterande innehållstyp, planhändelse och sambandsnivå
   väljs i listor. Objektidentitet (UUID), versionsdatum och illustrativa gränser fylls i automatiskt.
 
-**Planerat:**
-
-- Sköta kopplingarna mellan planen, innehållet, besluten och avsnitten i planhandlingen.
-- Leverera planen till NGP.
-- Förbereda för arkivering med bevarandemetadata enligt Boverkets specifikation för långtidsbevarande.
+**Planerat:** att prova leveransen mot Lantmäteriets verifieringsmiljö och att följa specifikationen när den
+fastställs.
 
 ## Installera
 
@@ -82,6 +87,7 @@ Fler detaljer: [Användarhandledning](docs/anvandning.md).
 
 ## Dokumentation
 
+- [ritaplan.xyz](https://ritaplan.xyz): webbsidan om Rita-pluginen
 - [Användarhandledning](docs/anvandning.md)
 - [Datamodell](docs/datamodell.md): tabellerna och var de avviker från Boverkets mall
 - [Symbologi](docs/symbologi.md): symbolerna per innehållstyp och varför de ser ut som de gör

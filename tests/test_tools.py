@@ -1,4 +1,4 @@
-"""Pennan, Markera, Avmarkera alla, Kopiera innehåll och Exportera, med en riktig plan i kartan."""
+"""Pennan, Markera, Avmarkera alla, Kopiera innehåll och Leverans och export, med en riktig plan i kartan."""
 import datetime
 import json
 import sys
@@ -106,7 +106,7 @@ class GreyedTests(ToolCase):
         self.assertTrue(toolbar.act_info.isEnabled())
         self.assertTrue(toolbar.act_select.isEnabled())
         for action in (toolbar.act_stop, toolbar.act_draw["polygon"], toolbar.act_import, toolbar.act_assign,
-                       toolbar.act_copy):
+                       toolbar.act_copy, toolbar.act_relate):
             self.assertFalse(action.isEnabled(), action.text())
         self.plugin.start_editing()  # lagrens editingStarted uppdaterar knapparna
         self.assertTrue(toolbar.act_draw["polygon"].isEnabled())

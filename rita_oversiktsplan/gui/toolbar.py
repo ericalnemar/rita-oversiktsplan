@@ -21,8 +21,9 @@ CHECKOUT_FILE_TIP = "Checka ut eller in: bara för planer i en PostGIS-databas. 
 START_TIP = "Börja redigera: alla planens lager öppnas för redigering."
 STOP_TIP = "Avsluta redigering: spara och avsluta, förkasta och avsluta, eller avbryt."
 INFO_TIP = "Planens uppgifter: planen, planhändelse, beslut och standardvärden för nytt innehåll"
-EXPORT_TIP = ("Exportera: kontrollera planen och spara den i Lantmäteriets format för översiktsplan (JSON), som "
-              "används vid leverans till Nationella geodataplattformen")
+EXPORT_TIP = ("Leverans och export: kontrollera planen mot Lantmäteriets format för översiktsplan, spara den som "
+              "JSON-fil, leverera den till Nationella geodataplattformen (kräver producentbehörighet) eller samla den i "
+              "ett arkivpaket")
 DOCUMENT_TIP = ("Skapa bokmärken i planhandling: öppnar programmet som ger planhandlingens textavsnitt (Word) "
                 "bokmärken i en kopia av dokumentet och kopplar dem till planens innehåll")
 SELECT_TIP = ("Markera: klicka eller dra en rektangel för att markera planens innehåll (välj objekt om flera ligger på "
@@ -39,6 +40,8 @@ IMPORT_TIP = ("Importera geometri: kopierar ytor, linjer och punkter från ett a
               "Att tilldela, utan attribut")
 ASSIGN_TIP = ("Tilldela innehåll: klicka på en ritad yta, linje eller punkt och välj grupp och innehållstyp. "
               "Klicka på tilldelat innehåll för att byta typ.")
+RELATE_TIP = ("Berör annat innehåll: klicka på ett innehåll och sedan på det innehåll det berör (klicka igen för att ta "
+              "bort kopplingen). Det berörda visas i blått. Högerklick eller Esc väljer ett nytt innehåll.")
 COPY_TIP = ("Kopiera innehåll: klicka på ett objekt med innehåll och sedan på de objekt som ska få samma innehåll "
             "(grupp, innehållstyp och övriga val i Tilldela innehåll, inte namnet). Högerklick eller Esc väljer en ny "
             "källa.")
@@ -65,7 +68,7 @@ class PlanToolBar(QToolBar):
         self.act_start = self._action("start.svg", "Börja redigera", h.start_editing, START_TIP)
         self.act_stop = self._action("stop.svg", "Avsluta redigering", h.stop_editing, STOP_TIP)
         self.act_info = self._action("info.svg", "Planens uppgifter", h.open_info, INFO_TIP)
-        self.act_export = self._action("export.svg", "Exportera", h.export_plan, EXPORT_TIP)
+        self.act_export = self._action("export.svg", "Leverans och export", h.export_plan, EXPORT_TIP)
         self.act_document = self._action("planhandling.svg", "Skapa bokmärken i planhandling", h.open_document,
                                          DOCUMENT_TIP)
         self.addSeparator()
@@ -79,6 +82,7 @@ class PlanToolBar(QToolBar):
         self.addSeparator()
         self.act_assign = self._toggle("assign.svg", "Tilldela innehåll", h.set_assigning, ASSIGN_TIP)
         self.act_copy = self._toggle("copy.svg", "Kopiera innehåll", h.set_copying, COPY_TIP)
+        self.act_relate = self._toggle("relate.svg", "Berör annat innehåll", h.set_relating, RELATE_TIP)
 
     def set_state(self, has_plan: bool, editing: bool, checkout_state: str) -> None:
         """Gråar det som inte går att använda: utan plan går bara Ny och Öppna, och att rita, importera, tilldela och
@@ -88,7 +92,7 @@ class PlanToolBar(QToolBar):
         self.act_stop.setEnabled(has_plan and editing)
         for action in (self.act_info, self.act_export, self.act_document, self.act_select, self.act_deselect):
             action.setEnabled(has_plan)
-        for action in (*self.act_draw.values(), self.act_import, self.act_assign, self.act_copy):
+        for action in (*self.act_draw.values(), self.act_import, self.act_assign, self.act_copy, self.act_relate):
             action.setEnabled(has_plan and editing)
 
     def set_checkout_state(self, state: str) -> None:

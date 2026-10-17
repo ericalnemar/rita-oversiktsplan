@@ -1,4 +1,5 @@
-"""Dialogen Exportera: kontrollen av planen mot Lantmäteriets format, och knappen som sparar planen som JSON."""
+"""Dialogen Leverans och export (som i Rita Detaljplan): kontrollen av planen mot Lantmäteriets format, och knapparna
+som sparar planen som JSON, levererar den till NGP och samlar den i ett arkivpaket."""
 from __future__ import annotations
 
 from typing import Callable, Optional
@@ -35,14 +36,17 @@ class ExportDialog(QDialog):
     """``show`` anropas med (tabell, fid) när man dubbelklickar på en anmärkning som gäller ett objekt."""
 
     def __init__(self, collection: dict, problems: list[export_lm.Problem], save: Callable[[], Optional[str]],
-                 show: Callable[[str, int], None], parent=None):
+                 show: Callable[[str, int], None], parent=None, deliver: Optional[Callable[[], Optional[str]]] = None,
+                 archive: Optional[Callable[[], Optional[str]]] = None,
+                 settings: Optional[Callable[[], None]] = None):
         super().__init__(parent)
-        self.setWindowTitle("Exportera översiktsplanen")
-        self.setMinimumSize(640, 420)
+        self.setWindowTitle("Leverans och export")
+        self.setMinimumSize(680, 440)
         self.problems = problems
-        self._save, self._show = save, show
-        intro = QLabel("Planen sparas i Lantmäteriets format för översiktsplan (JSON, Översiktsplan 2.0, "
-                       "testversion), som används vid leverans till Nationella geodataplattformen.")
+        self._save, self._show, self._deliver, self._archive = save, show, deliver, archive
+        intro = QLabel("Kontrollen gäller Lantmäteriets format för översiktsplan (JSON, Översiktsplan 2.0, testversion). "
+                       "Spara planen som fil, leverera den till Nationella geodataplattformen (NGP, kräver "
+                       "producentbehörighet) eller samla den och handlingarna i ett arkivpaket.")
         intro.setWordWrap(True)
         self.summary = QLabel(summary(collection, problems))
         self.summary.setWordWrap(True)
@@ -61,9 +65,24 @@ class ExportDialog(QDialog):
         self.result.setWordWrap(True)
         self.save_button = QPushButton("Spara som JSON…")
         self.save_button.clicked.connect(self.save)
+        self.deliver_button = QPushButton("Leverera till NGP…")
+        self.deliver_button.setToolTip("Levererar planen till Nationella geodataplattformen via Lantmäteriets "
+                                       "Uppdatering-API. Kräver producentbehörighet och inställningar.")
+        self.deliver_button.clicked.connect(self.deliver)
+        self.deliver_button.setVisible(deliver is not None)
+        self.archive_button = QPushButton("Skapa arkivpaket…")
+        self.archive_button.setToolTip("Samlar planen och handlingarna med bevarandemetadata enligt Boverkets "
+                                       "specifikation för långtidsbevarande.")
+        self.archive_button.clicked.connect(self.archive)
+        self.archive_button.setVisible(archive is not None)
+        self.settings_button = QPushButton("Inställningar…")
+        self.settings_button.setToolTip("Inställningar för leverans till NGP: miljö, adresser och inloggning.")
+        self.settings_button.clicked.connect(lambda: settings() if settings else None)
+        self.settings_button.setVisible(settings is not None)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Stäng")
-        buttons.addButton(self.save_button, QDialogButtonBox.ButtonRole.ActionRole)
+        for button in (self.save_button, self.deliver_button, self.archive_button, self.settings_button):
+            buttons.addButton(button, QDialogButtonBox.ButtonRole.ActionRole)
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
         layout.addWidget(intro)
@@ -77,8 +96,17 @@ class ExportDialog(QDialog):
         if problem.layer and problem.fid is not None:
             self._show(problem.layer, problem.fid)
 
-    def save(self) -> Optional[str]:
-        text = self._save()
+    def _run(self, action) -> Optional[str]:
+        text = action() if action is not None else None
         if text:
             self.result.setText(text)
         return text
+
+    def save(self) -> Optional[str]:
+        return self._run(self._save)
+
+    def deliver(self) -> Optional[str]:
+        return self._run(self._deliver)
+
+    def archive(self) -> Optional[str]:
+        return self._run(self._archive)

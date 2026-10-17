@@ -29,7 +29,7 @@ from typing import Any, Optional
 from qgis.core import NULL, QgsGeometry, QgsWkbTypes
 from qgis.PyQt.QtCore import QDate, QDateTime
 
-from . import model
+from . import model, relations
 from .project import draft_layers, layer_in_group, plan_storage
 
 MEDIATYP = "application/vnd.lm.oversiktsplan.v2+json"
@@ -171,6 +171,7 @@ class _Plan:
         storage = plan_storage(group)
         self.epsg = storage.epsg
         self.lookups = {lookup.name: storage.read_lookup_values(lookup) for lookup in model.LOOKUPS}
+        self.relations = relations.links(group)  # berör annat innehåll
         self.problems: list[Problem] = []
 
     def layer(self, name: str):
@@ -307,7 +308,7 @@ def _underlag(plan: _Plan, row, documents: dict) -> list[dict]:
     return result
 
 
-def _decision_features(plan: _Plan, plan_identity: Optional[str]) -> list[dict]:
+def _decision_features(plan: _Plan, plan_identity: Optional[str], content: list[dict]) -> list[dict]:
     result = []
     table = model.BESLUT.name
     for row in plan.rows(table):
@@ -322,8 +323,11 @@ def _decision_features(plan: _Plan, plan_identity: Optional[str]) -> list[dict]:
             props["handelse"] = events
         else:
             plan.problem(FEL, "Beslutet saknar datum (när det fattades eller fick laga kraft).", table, row.id())
-        if plan_identity:
-            props["paverkar"] = [{"identitet": plan_identity, "objekttyp": "oversiktsplan"}]
+        affected = [{"identitet": plan_identity, "objekttyp": "oversiktsplan"}] if plan_identity else []
+        affected += [{"identitet": c["properties"]["objektidentitet"], "objekttyp": "innehallOP"} for c in content
+                     if c["properties"].get("beslut") == props["objektidentitet"]]
+        if affected:
+            props["paverkar"] = affected  # planen och det innehåll beslutet gäller
         _put(props, "rubrik", _text(row["rubrik"]))
         _put(props, "diarienummer", _text(row["diarienummer"]))
         if "diarienummer" not in props:
@@ -376,6 +380,16 @@ def _content_features(plan: _Plan, plan_identity: Optional[str], sections: dict)
             scale = row["presentationsskala"]
             _put(props, "presentationsskala", int(scale) if not _blank(scale) else None)
             _put(props, "dokument", sections.get(props["objektidentitet"]))
+            link = _text(row["beror_annat_innehall_id"])
+            _put(props, "berorAnnatInnehall", sorted(plan.relations.get(link, ())) if link else None)
+            if "objektidentitet_ri" in names and _text(row["objektidentitet_ri"]):
+                when = _datetime(row["hamtatdatum"]) if "hamtatdatum" in names and _date(row["hamtatdatum"]) \
+                    else props.get("versionGiltigFran")
+                props["externReferens"] = [{  # riksintresset hos den ansvariga myndigheten (tolkning)
+                    "identitet": _text(row["objektidentitet_ri"]),
+                    "producentensIdentitet": _text(row["objektidentitet_ri"]),
+                    "tidsstampel": when or datetime.datetime.now().astimezone().replace(microsecond=0).isoformat(),
+                    "avser": "Riksintresse"}]
             what = f"{category.alias}: {kind['varde'] if kind else 'innehåll'}"
             for key, text in (("planhandelse", "planhändelse"), ("datumPlanhandelse", "datum för planhändelsen")):
                 if key not in props:
@@ -398,8 +412,8 @@ def export(group) -> tuple[dict, list[Problem]]:
     documents = _documents(plan)
     sections = _sections(plan, documents)
     plan_feature, plan_identity = _plan_feature(plan, sections, documents)
-    features = ([plan_feature] if plan_feature else []) + _decision_features(plan, plan_identity) \
-        + _content_features(plan, plan_identity, sections)
+    content = _content_features(plan, plan_identity, sections)
+    features = ([plan_feature] if plan_feature else []) + _decision_features(plan, plan_identity, content) + content
     if not any(f["properties"]["feature:typ"] == "innehallOP" for f in features):
         plan.problem(VARNING, "Planen har inget innehåll än.")
     drafts = sum(layer.featureCount() for layer in draft_layers(group).values() if layer is not None)

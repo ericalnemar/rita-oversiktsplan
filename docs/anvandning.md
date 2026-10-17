@@ -20,7 +20,7 @@ Verktygsfältet **Rita Översiktsplan**, från vänster:
 | Penna | **Börja redigera**: öppnar alla planens lager för redigering |
 | Diskett | **Avsluta redigering**: frågar om ändringarna ska sparas eller kastas och avslutar redigeringen |
 | Skrivplatta | **Planens uppgifter**: planen, planhändelsen, beslutet och standardvärden för nytt innehåll |
-| Låda med pil upp | **Exportera**: kontrollerar planen och sparar den i Lantmäteriets format (se nedan) |
+| Låda med pil upp | **Leverans och export**: kontrollerar planen, sparar den i Lantmäteriets format, levererar den till NGP eller skapar ett arkivpaket (se nedan) |
 | Dokument med grön etikett | **Skapa bokmärken i planhandling**: öppnar programmet som kopplar textavsnitten i Word till planens innehåll (se nedan) |
 | Yta med muspekare | **Markera**: klicka eller dra en rektangel för att markera planens innehåll |
 | Streckad yta med rött kryss | **Avmarkera alla** |
@@ -30,18 +30,19 @@ Verktygsfältet **Rita Översiktsplan**, från vänster:
 | Röd låda med pil ned | **Importera geometri**: hämta ytor, linjer och punkter från ett annat lager (se nedan) |
 | Lapp med muspekare | **Tilldela innehåll**: klicka på det du ritat och välj vad det är |
 | Två lappar med grönt plus | **Kopiera innehåll**: ge andra objekt samma innehåll som ett objekt du klickar på (se nedan) |
+| Två ytor med blå streckad linje | **Berör annat innehåll**: koppla ett innehåll till det innehåll det berör (se nedan) |
 
 Knapparna är desamma, och står i samma ordning, som i Rita Detaljplan.
 
 Knappar som inte går att använda just nu är **gråa**: utan en öppen plan går bara *Ny* och *Öppna*, och för att rita,
-importera, tilldela eller kopiera innehåll måste redigeringen vara påbörjad med **pennan** (*Börja redigera*). En
+importera, tilldela, kopiera eller koppla innehåll måste redigeringen vara påbörjad med **pennan** (*Börja redigera*). En
 plan i en databas checkas ut när du klickar på pennan.
 
 Har du flera planer öppna gäller knapparna den plan som det markerade lagret hör till, annars den översta planen i
 lagerpanelen.
 
 Samma kommandon finns under **Insticksprogram → Rita Översiktsplan**. Där kan du också visa eller dölja
-verktygsfältet, och öppna **Om Rita Översiktsplan…** med version, licens och en länk till den här handledningen.
+verktygsfältet, och öppna **Om Rita Översiktsplan…** med version, licens, en länk till den här handledningen och till webbsidan [ritaplan.xyz](https://ritaplan.xyz).
 
 ## Skapa en ny översiktsplan
 
@@ -148,6 +149,17 @@ kompletterande innehållstyp, sambandsnivå, precisering och utbyggnadsordning, 
 geometri (som då får innehållet) eller annat innehåll (som byter typ men behåller sin identitet). Verktyget ligger
 kvar, så att du kan klicka på flera objekt i rad. Högerklick eller Esc väljer ett nytt objekt att kopiera från.
 
+**Berör annat innehåll** kopplar ihop innehåll som hänger ihop, till exempel en klimatrisk som berör ett område för
+bostadsbebyggelse (`berorAnnatInnehall` i Lantmäteriets format). Klicka först på innehållet du utgår från (det visas i
+grönt, och det som det redan berör i blått) och sedan på det innehåll det berör. Klicka på samma innehåll igen för att
+ta bort kopplingen. Verktyget ligger kvar; högerklick eller Esc väljer ett nytt innehåll att utgå från. Kopplingen går
+åt ett håll: att klimatrisken berör bostadsområdet säger inget om bostadsområdet. Otilldelad geometri kan inte kopplas.
+Kopplingarna sparas när du sparar redigeringen.
+
+**Riksintressets id.** För riksintressen (kommunens ställningstagande och riksintressen enligt 3 och 4 kap. MB) har
+*Tilldela innehåll* ett fält för riksintressets id hos den myndighet som pekat ut det. Det blir en extern referens i
+exporten.
+
 **Pennan** (*Börja redigera*) öppnar alla planens lager för redigering på en gång. *Avsluta redigering* frågar om
 ändringarna ska sparas eller förkastas och stänger redigeringen.
 
@@ -231,14 +243,14 @@ Varje grupp har en egen symbol, och färgen visar innehållstypen. Teckenförkla
 är pluginets eget förslag, eftersom Boverket inte styr hur en översiktsplan ska visas, och de fungerar i webbkartor.
 Se [Symbologi](symbologi.md), och ändra fritt under lagrets egenskaper.
 
-## Exportera
+## Leverans och export
 
-**Exportera** (lådan med pil upp) kontrollerar planen och sparar den i Lantmäteriets format för översiktsplan:
+**Leverans och export** (lådan med pil upp) kontrollerar planen och sparar den i Lantmäteriets format för översiktsplan:
 *Översiktsplan 2.0* (JSON), det format som används vid leverans till Nationella geodataplattformen (NGP).
 Specifikationen är i testversion. Filen innehåller:
 
 - **planen**: kommun, titel, planhändelse, datum, underlag och kopplingar till planhandlingen,
-- **beslutet**: diarienummer och datum, om det är ifyllt under Planens uppgifter, och
+- **beslutet**: diarienummer och datum, om det är ifyllt under Planens uppgifter, och vilket innehåll det gäller,
 - **allt innehåll**: innehållstyp och övriga uppgifter, geometrin i planens koordinatsystem och kopplingarna till planhandlingens
   bokmärken.
 
@@ -252,7 +264,43 @@ filen inte formatet.
 
 Formatet kräver att planen har minst ett **underlag**; lägg till det under *Planens uppgifter*, fliken *Underlag*.
 
-Leverans direkt till NGP finns inte än.
+### Antagandebeslutet gäller innehållet
+
+När du sparar antagandebeslutet under *Planens uppgifter*, fliken *Beslut*, får allt innehåll som ännu inte hör till
+ett beslut beslutets id (fältet *beslut*). Innehåll som redan hör till ett annat beslut, till exempel en senare ändring,
+rörs inte. I exporten räknar beslutet upp planen och det innehåll det gäller.
+
+### Leverera till NGP
+
+**Leverera till NGP…** skickar planen till Nationella geodataplattformen via Lantmäteriets Uppdatering-API, på samma
+sätt som i Rita Detaljplan. Först krävs inställningar: klicka **Inställningar…** (eller *Insticksprogram → Rita
+Översiktsplan → Inställningar för leverans till NGP…*) och välj miljö (Lantmäteriets **verifieringsmiljö**, som man
+provar i, eller **produktion**) och en autentiseringskonfiguration i QGIS med nyckeln och hemligheten från
+Lantmäteriets API-portal. Kommunen måste ha behörighet som producent för översiktsplan.
+
+Pluginet frågar innan något skickas, och säger vart planen skickas och hur många fel kontrollen hittade. Leveransen
+sker i bakgrunden; när Lantmäteriet validerat planen visas resultatet med **valideringsrapporten** (det som inte gick
+igenom, med Lantmäteriets egna texter). Får planen valideringsfel rättar du dem och levererar igen: planen skickas då
+på samma mottagning hos Lantmäteriet.
+
+### Arkivpaket
+
+**Skapa arkivpaket…** (i dialogen eller i menyn) samlar planen och handlingarna i en mapp med bevarandemetadata enligt
+Boverkets specifikation *Långtidsbevarande och arkivering av översiktsplan och detaljplan*:
+
+- `oversiktsplan.xml`: planens uppgifter (titel, kommun, planhändelse, diarienummer, datum),
+- `metadata/PREMIS.xml`: varje fil med id, kontrollsumma (SHA-256), storlek, format och program, och vad som hänt
+  (paketet skapades, av vem),
+- `content/`: filerna.
+
+Välj vad som ska med: planens **GeoPackage** (bara för en plan i en fil; en plan i en databas checkar du ut först, eller
+nöjer dig med exportfilen), **exportfilen** i Lantmäteriets format, **planhandlingen** med bokmärken och dess
+webbversion, **underlagens filer** (de som finns på datorn) och **egna dokument** som du lägger till, till exempel
+planhandlingen som PDF/A. Pluginet gör inga filer till PDF/A: spara själv plankarta och planhandling som PDF/A och
+kontrollera dem med en PDF/A-validerare (till exempel veraPDF). Pluginet påpekar bara när en PDF inte säger sig vara
+PDF/A. Avsluta redigeringen först, så att det du ritat är sparat.
+
+**Kontrollera arkivpaket…** i menyn räknar om kontrollsummorna och säger om någon fil ändrats, saknas eller tillkommit.
 
 ## Spara
 

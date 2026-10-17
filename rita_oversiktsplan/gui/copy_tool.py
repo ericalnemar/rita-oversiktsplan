@@ -25,6 +25,7 @@ class CopyTool(QgsMapTool):
         self._rubber.setColor(QColor(40, 160, 90, 60))
         self._rubber.setStrokeColor(QColor(40, 160, 90))
         self._rubber.setWidth(2)
+        self._targets: list[QgsRubberBand] = []  # det som källan är kopplad till (Berör annat innehåll)
 
     def tolerance(self) -> float:
         return max(self.canvas().mapUnitsPerPixel() * CLICK_PIXELS, MIN_TOLERANCE)
@@ -44,6 +45,7 @@ class CopyTool(QgsMapTool):
 
     def deactivate(self):
         self.show_source(None)
+        self.show_targets([])
         super().deactivate()
 
     def show_source(self, geometry: Optional[QgsGeometry], layer=None) -> None:
@@ -51,3 +53,17 @@ class CopyTool(QgsMapTool):
         self._rubber.reset(layer.geometryType() if layer is not None else Qgis.GeometryType.Polygon)
         if geometry is not None:
             self._rubber.setToGeometry(QgsGeometry(geometry), layer)
+
+    def show_targets(self, items: list) -> None:
+        """Visar objekten källan är kopplad till i blått: ``items`` är (geometri, lager)."""
+        canvas = self.canvas()
+        for band in self._targets:
+            canvas.scene().removeItem(band)
+        self._targets = []
+        for geometry, layer in items:
+            band = QgsRubberBand(canvas, layer.geometryType())
+            band.setColor(QColor(30, 110, 200, 50))
+            band.setStrokeColor(QColor(30, 110, 200))
+            band.setWidth(2)
+            band.setToGeometry(QgsGeometry(geometry), layer)
+            self._targets.append(band)

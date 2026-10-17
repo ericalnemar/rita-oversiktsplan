@@ -18,7 +18,7 @@ from .project import draft_layers, layer_in_group, plan_storage
 
 # Fält som tilldelningsdialogen fyller i; resten kommer från standardvärdena och planen.
 CONTENT_FIELDS = ("innehallstyp_varde", "kompletterandeInnehallstyp", "namn", "precisering", "sambandsniva_varde",
-                  "utbyggnadsordning")
+                  "utbyggnadsordning", "objektidentitet_ri")
 
 
 @dataclass(frozen=True)
@@ -268,6 +268,8 @@ def write_plan_info(group, info: PlanInfo, update_content: bool) -> int:
     if not layer.commitChanges(started):
         raise ValueError("Kunde inte spara planens uppgifter: " + "; ".join(layer.commitErrors()))
     plan_storage(group).write_defaults(info.defaults)
+    if decision:
+        link_decision(group, decision)
     if not update_content:
         return 0
     changed = 0
@@ -283,6 +285,28 @@ def write_plan_info(group, info: PlanInfo, update_content: bool) -> int:
                     info.planhandelse, info.planhandelse_datum):
                 content.changeAttributeValues(f.id(), idx)
                 changed += 1
+        if started and not content.commitChanges():
+            raise ValueError(f"Kunde inte spara {layer_def.alias}: " + "; ".join(content.commitErrors()))
+    return changed
+
+
+def link_decision(group, decision: str) -> int:
+    """Antagandebeslutet gäller planen och allt innehåll som ännu inte har ett beslut: innehållets ``beslut`` får
+    beslutets objektidentitet (och beslutets ``paverkar`` i exporten räknar upp dem). Innehåll som redan hör till ett
+    annat beslut, till exempel en senare ändring, rörs inte. Returnerar antalet objekt som fick beslutet."""
+    changed = 0
+    for layer_def in model.CONTENT_LAYERS:
+        content = layer_in_group(group, layer_def.name)
+        if content is None or content.featureCount() == 0:
+            continue
+        index = content.fields().indexOf("beslut")
+        ids = [f.id() for f in content.getFeatures() if plain(f["beslut"]) is None]
+        if not ids:
+            continue
+        started = not content.isEditable() and content.startEditing()
+        for fid in ids:
+            content.changeAttributeValue(fid, index, decision)
+        changed += len(ids)
         if started and not content.commitChanges():
             raise ValueError(f"Kunde inte spara {layer_def.alias}: " + "; ".join(content.commitErrors()))
     return changed

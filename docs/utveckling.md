@@ -61,14 +61,17 @@ rita_oversiktsplan/    pluginet (det som installeras)
                        model, opkatalog, styles, colors, planhandling (Word, bokmärken) och
                        planhandling_html (webbversionen) (ren Python),
                        geopackage (GDAL), project, symbology, content (rita, tilldela, planens uppgifter) och
-                       documents (kopplingar till planhandlingen) (QGIS), kommuner
+                       documents (kopplingar till planhandlingen), relations (berör annat innehåll) (QGIS),
+                       kommuner, archive (arkivpaket med PREMIS, ren Python), ngp_client och settings (leverans
+                       till NGP; kopierade från Rita Detaljplan)
   gui/                 verktygsfältet, kartverktyget Tilldela innehåll och dialogerna: Ny översiktsplan,
-                       Tilldela innehåll, Planens uppgifter, Om-dialogen, kommunlistan, meddelanderaden
+                       Tilldela innehåll, Planens uppgifter, Leverans och export, arkivpaket, NGP-leverans och
+                       inställningar, Om-dialogen, kommunlistan, meddelanderaden
   bookmarks/            programmet Skapa bokmärken i planhandling (eget fönster, som Tagga planbeskrivning i Rita
                        Detaljplan): session (tillståndet, utan Qt), host (planen i QGIS), main (fönstret),
                        pages (stegen), widgets och theme
   icons/               ikoner till verktygsfältet (SVG; Öppna, Uppgifter, pennan, Markera, Avmarkera, Kopiera och
-                       Exportera är hämtade från Rita Detaljplan)
+                       Leverans och export är hämtade från Rita Detaljplan)
   data/                ÖP-katalogen och kommunlistan
 tools/                 byggskript, hämtning av ÖP-katalogen, utkastet till planhandling, märket
 exempel/               utkastet till planhandling (följer inte med zip-filen)
