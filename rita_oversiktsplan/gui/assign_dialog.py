@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit,
-                                 QPlainTextEdit, QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
+                                 QLineEdit, QPlainTextEdit, QVBoxLayout, QWidget)
 
-from ..core import model, opkatalog
+from ..core import model, opkatalog, styles
 from ..core.content import Assignment
 
 NONE = "– ingen –"
@@ -44,6 +44,21 @@ class AssignDialog(QDialog):
         self.riksintresse.setToolTip("Riksintressets identitet i den ansvariga myndighetens data, till exempel "
                                      "Naturvårdsverkets eller Trafikverkets. Följer med i exporten som en extern "
                                      "referens.")
+        self.arrow_end = QCheckBox("där linjen slutar")
+        self.arrow_start = QCheckBox("där linjen börjar")
+        self.arrow_end.setToolTip("En pilspets i linjens sista punkt, där du slutade rita.")
+        self.arrow_start.setToolTip("En pilspets i linjens första punkt, där du började rita.")
+        self.arrows = QWidget()
+        arrows_row = QHBoxLayout(self.arrows)
+        arrows_row.setContentsMargins(0, 0, 0, 0)
+        arrows_row.addWidget(self.arrow_end)
+        arrows_row.addWidget(self.arrow_start)
+        arrows_row.addStretch(1)
+        self._arrows_touched = False  # följer temat tills man själv kryssar
+        for box in (self.arrow_end, self.arrow_start):
+            box.clicked.connect(lambda *_: setattr(self, "_arrows_touched", True))
+        self.complement.currentIndexChanged.connect(self._default_arrows)
+        self.suffix = suffix
         self.description = QLabel()
         self.description.setWordWrap(True)
         self.description.setEnabled(False)  # dämpad färg
@@ -58,6 +73,7 @@ class AssignDialog(QDialog):
         self.form.addRow("Precisering", self.precisering)
         self.form.addRow("Utbyggnadsordning", self.utbyggnadsordning)
         self.form.addRow("Riksintressets id", self.riksintresse)
+        self.form.addRow("Pilspets", self.arrows)
         note = QLabel("Planhändelse, vertikal avgränsning och andra uppgifter som gäller allt innehåll ställs in "
                       "under Planens uppgifter.")
         note.setWordWrap(True)
@@ -86,8 +102,25 @@ class AssignDialog(QDialog):
         return self.categories[self.group.currentIndex()]
 
     def _has(self, field: str) -> bool:
-        layer_def = next(d for d in model.CONTENT_LAYERS if d.category == self.category())
+        """Om lagret som objektet hamnar i har fältet (geometrin avgör: pilspetsar finns bara för linjer)."""
+        layer_defs = [d for d in model.CONTENT_LAYERS if d.category == self.category()]
+        layer_def = next((d for d in layer_defs if d.name.endswith(f"_{self.suffix}")), layer_defs[0])
         return any(f.name == field for f in layer_def.fields)
+
+    def _default_arrows(self, *_) -> None:
+        if self._arrows_touched:
+            return
+        end, start = styles.default_arrows(self.complement.currentData())
+        self.arrow_end.setChecked(end)
+        self.arrow_start.setChecked(start)
+
+    def arrow_value(self) -> Optional[str]:
+        """Fältets värde: tomt så länge kryssen är temats standard (då följer pilarna temat), annars valet."""
+        chosen = (self.arrow_end.isChecked(), self.arrow_start.isChecked())
+        if chosen == styles.default_arrows(self.complement.currentData()):
+            return None
+        return {(True, False): model.ARROW_END, (False, True): model.ARROW_START, (True, True): model.ARROW_BOTH,
+                (False, False): model.ARROW_NONE}[chosen]
 
     def _on_group(self, *_):
         category = self.category()
@@ -104,8 +137,9 @@ class AssignDialog(QDialog):
         self.form.setRowVisible(self.complement, category.kompletterande is not None)
         for widget, field in ((self.sambandsniva, "sambandsniva_varde"), (self.precisering, "precisering"),
                               (self.utbyggnadsordning, "utbyggnadsordning"),
-                              (self.riksintresse, "objektidentitet_ri")):
+                              (self.riksintresse, "objektidentitet_ri"), (self.arrows, model.ARROW_FIELD)):
             self.form.setRowVisible(widget, self._has(field))
+        self._default_arrows()
         self._on_value()
 
     def _fill_combo(self, combo: QComboBox, values: list[str]) -> None:
@@ -133,6 +167,14 @@ class AssignDialog(QDialog):
         self.precisering.setPlainText(str(current.get("precisering") or ""))
         self.utbyggnadsordning.setText(str(current.get("utbyggnadsordning") or ""))
         self.riksintresse.setText(str(current.get("objektidentitet_ri") or ""))
+        chosen = {model.ARROW_END: (True, False), model.ARROW_START: (False, True), model.ARROW_BOTH: (True, True),
+                  model.ARROW_NONE: (False, False)}.get(current.get(model.ARROW_FIELD))
+        if chosen is not None:
+            self.arrow_end.setChecked(chosen[0])
+            self.arrow_start.setChecked(chosen[1])
+            self._arrows_touched = True
+        else:
+            self._default_arrows()
 
     # -- resultat -----------------------------------------------------------------------
     def assignment(self) -> Assignment:
@@ -148,4 +190,6 @@ class AssignDialog(QDialog):
             values["utbyggnadsordning"] = self.utbyggnadsordning.text().strip() or None
         if self._has("objektidentitet_ri"):
             values["objektidentitet_ri"] = self.riksintresse.text().strip() or None
+        if self._has(model.ARROW_FIELD):
+            values[model.ARROW_FIELD] = self.arrow_value()
         return Assignment(self.category(), values)

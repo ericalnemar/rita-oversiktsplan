@@ -63,7 +63,7 @@ rita_oversiktsplan/    pluginet (det som installeras)
                        geopackage (GDAL), project, symbology, content (rita, tilldela, planens uppgifter) och
                        documents (kopplingar till planhandlingen), relations (berör annat innehåll) (QGIS),
                        kommuner, archive (arkivpaket med PREMIS, ren Python), ngp_client och settings (leverans
-                       till NGP; kopierade från Rita Detaljplan)
+                       till NGP; kopierade från Rita Detaljplan), sld (stilfiler för GeoServer, ren Python)
   gui/                 verktygsfältet, kartverktyget Tilldela innehåll och dialogerna: Ny översiktsplan,
                        Tilldela innehåll, Planens uppgifter, Leverans och export, arkivpaket, NGP-leverans och
                        inställningar, Om-dialogen, kommunlistan, meddelanderaden

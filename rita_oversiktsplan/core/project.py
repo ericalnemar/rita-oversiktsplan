@@ -7,7 +7,7 @@ from qgis.core import (QgsCoordinateReferenceSystem, QgsDefaultValue, QgsEditFor
                        QgsFieldConstraints, QgsProject, QgsVectorLayer)
 
 from . import model, symbology
-from .storage import GeoPackageStorage, Storage, as_storage, from_key
+from .storage import GeoPackageStorage, PostgisError, PostgisStorage, Storage, as_storage, from_key
 
 PLAN_PROPERTY = "rita_oversiktsplan/plan"  # på planens grupp: GeoPackage-filens sökväg, eller planens plats i databasen
 CHECKOUT_PATH_PROPERTY = "rita_oversiktsplan/checkout_path"  # på gruppen: den lokala kopian när planen är utcheckad
@@ -59,6 +59,20 @@ def layer_in_group(group, table: str) -> QgsVectorLayer | None:
     return None
 
 
+def drawing_order(layer_defs: list) -> list:
+    """Punkt överst, sedan linje och yta underst i lagerpanelen: det översta lagret ritas överst, så ytor får inte
+    täcka linjer och punkter."""
+    rank = {"Point": 0, "MultiLineString": 1, "MultiPolygon": 2}
+    return sorted(layer_defs, key=lambda d: rank.get(d.geometry, 3))
+
+
+def category_order() -> list:
+    """Innehållstyperna i lagerpanelen: mark- och vattenanvändningen sist (underst), eftersom den är grunden och
+    nästan täckande; övrigt innehåll är genomskinliga tillägg ovanpå."""
+    base = [c for c in model.CATEGORIES if c.key == "markochvattenanvandning"]
+    return [c for c in model.CATEGORIES if c not in base] + base
+
+
 def load_plan(source, project: QgsProject) -> dict[str, QgsVectorLayer]:
     """Lägger till planens lager i ``project``, i en egen grupp överst i lagerpanelen, och ställer in dem. ``source``
     är en GeoPackage (sökväg) eller ett ``Storage`` (en plan i en databas, som då är skrivskyddad tills den checkas
@@ -69,6 +83,11 @@ def load_plan(source, project: QgsProject) -> dict[str, QgsVectorLayer]:
         from . import geopackage
         if geopackage.read_meta(plan_storage_.path) and geopackage.upgrade(plan_storage_.path):
             pass  # äldre plan: det som saknas är tillagt
+    elif isinstance(plan_storage_, PostgisStorage):
+        try:
+            plan_storage_.upgrade()  # ett schema från en äldre version: saknade kolumner läggs till
+        except PostgisError as exc:
+            raise PlanError(str(exc)) from exc
     what = plan_storage_.describe()
     meta = plan_storage_.read_meta()
     if not meta:
@@ -101,12 +120,12 @@ def load_plan(source, project: QgsProject) -> dict[str, QgsVectorLayer]:
 
     add(model.OVERSIKTSPLAN, group)
     drafts = group.addGroup(DRAFTS_GROUP)  # överst: det man ritar hamnar här tills det fått innehåll
-    for layer_def in model.DRAFT_LAYERS.values():
+    for layer_def in drawing_order(list(model.DRAFT_LAYERS.values())):
         _suppress_form(add(layer_def, drafts))
-    for category in model.CATEGORIES:
+    for category in category_order():
         defs = [d for d in model.CONTENT_LAYERS if d.category == category]
         parent = group if category.polygon_only else group.addGroup(category.alias)
-        for layer_def in defs:
+        for layer_def in drawing_order(defs):
             add(layer_def, parent)
         if not category.polygon_only:
             parent.setExpanded(False)

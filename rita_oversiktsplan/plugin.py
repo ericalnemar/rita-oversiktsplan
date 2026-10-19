@@ -17,7 +17,7 @@ from qgis.PyQt.QtWidgets import QAction, QApplication, QFileDialog, QMenu, QMess
 from qgis.PyQt import sip
 
 from .core import (archive, checkout, content, editing, export_lm, geopackage, importer, model, relations, settings,
-                   storage, underlag)
+                   sld, storage, underlag)
 from .core import ngp_client as ngp
 from .core.project import (PlanError, active_plan_group, draft_layers, is_read_only, layer_in_group, load_plan,
                            plan_groups, plan_storage)
@@ -83,6 +83,7 @@ class OversiktsplanPlugin:
         self._add_action("Skapa arkivpaket…", self.open_archive)
         self._add_action("Kontrollera arkivpaket…", self.verify_archive)
         self._add_action("Inställningar för leverans till NGP…", self.open_settings)
+        self._add_action("Spara stilar för GeoServer (SLD)…", self.export_sld)
         self._add_action("Skapa bokmärken i planhandling…", self.open_document, icon("planhandling.svg"))
         self._add_action("Spara alla redigeringar", self.save_all, icon("save.svg"))
         self.iface.addPluginToMenu(MENU, self._separator())
@@ -131,9 +132,25 @@ class OversiktsplanPlugin:
             self.toolbar = None
 
     # -- planen -------------------------------------------------------------------
+    def _save_project_file(self, qgz: Path) -> str:
+        """Sparar det öppna projektet som den nya planens projektfil (som i Rita Detaljplan), så att man inte behöver
+        spara det separat. Ett projekt som redan är sparat som något annat (planen lades till i ett befintligt
+        projekt) rörs inte. Returnerar en mening om vad som hände, eller tom text."""
+        project = QgsProject.instance()
+        if project.fileName():
+            return ""
+        if project.write(str(qgz)):
+            return f" Projektet är sparat som {qgz.name}."
+        self._warn(f"Kunde inte spara projektfilen {qgz}: {project.error()}")
+        return ""
+
     def new_plan(self):
         dialog = NewPlanDialog(self.iface.mainWindow())
         if not dialog.exec():
+            return
+        qgz = dialog.project_file()
+        if qgz.exists() and not QgsProject.instance().fileName():
+            self._warn(f"Det finns redan en projektfil som heter {qgz.name} i mappen. Välj ett annat filnamn.")
             return
         if dialog.destination() == DATABASE:
             connection, schema, plan_id = dialog.database_target()
@@ -144,7 +161,7 @@ class OversiktsplanPlugin:
                 return
             if self._load(target):
                 self._info(f"Skapade planen {plan_id} i schemat {schema}. Den är skrivskyddad i databasen: checka ut "
-                           "den för att rita.")
+                           "den för att rita." + self._save_project_file(qgz))
             return
         target = dialog.target()
         try:
@@ -157,7 +174,7 @@ class OversiktsplanPlugin:
             return
         if self._load(target):
             self._info(f"Skapade {target.name}. Rita en yta, linje eller punkt och ge den innehåll med Tilldela "
-                       "innehåll.")
+                       "innehåll." + self._save_project_file(qgz))
 
     def open_plan(self):
         """Öppnar en plan från en fil, eller (om QGIS har PostgreSQL-anslutningar) från en databas."""
@@ -237,6 +254,28 @@ class OversiktsplanPlugin:
                     self._set_tool(name, False)
         self.toolbar.set_state(group is not None, is_editing,
                                checkout.state(group) if group is not None else checkout.FILE)
+        self._apply_label_visibility()  # en plan som just lästs in har sina texter påslagna
+
+    def labels_hidden(self) -> bool:
+        return self.toolbar is not None and self.toolbar.act_hide_labels.isChecked()
+
+    def set_labels_hidden(self, hidden: bool) -> None:
+        """Dölj texter (som i Rita Detaljplan): namnen på kartan är avstängda i alla öppna planer så länge knappen är
+        nedtryckt."""
+        self._apply_label_visibility(repaint=True)
+
+    def _apply_label_visibility(self, repaint: bool = False) -> None:
+        show = not self.labels_hidden()
+        for group in plan_groups(QgsProject.instance()):
+            for layer_def in model.CONTENT_LAYERS:
+                layer = layer_in_group(group, layer_def.name)
+                if layer is None or layer.labeling() is None:
+                    continue
+                if layer.labelsEnabled() != show:
+                    layer.setLabelsEnabled(show)
+                    layer.triggerRepaint()
+                elif repaint:
+                    layer.triggerRepaint()
 
     def _editable(self, group) -> bool:
         """En plan i databasen är skrivskyddad: erbjud att checka ut den. True om planen går att ändra."""
@@ -429,6 +468,38 @@ class OversiktsplanPlugin:
         if package.notes:
             self._warn("Att tänka på: " + " ".join(package.notes))
         return text
+
+    def _ask_folder(self, title: str) -> str:  # byts ut i tester
+        home = QgsProject.instance().homePath() or ""
+        return QFileDialog.getExistingDirectory(self.iface.mainWindow(), title, home)
+
+    def export_sld(self, group=None) -> Optional[list[Path]]:
+        """Sparar en stilfil (SLD) per innehållslager, anpassad för GeoServer: pilspetsarna i utvecklingsinriktningens
+        linjeändar görs om till GeoServers form (se ``core.sld``). Filen heter som tabellen."""
+        from qgis.core import QgsSldExportContext
+        group = group or self._group()
+        if group is None:
+            return None
+        chosen = self._ask_folder("Välj mapp för stilfilerna (SLD)")
+        if not chosen:
+            return None
+        written = []
+        for layer_def in model.CONTENT_LAYERS:
+            layer = layer_in_group(group, layer_def.name)
+            if layer is None:
+                continue
+            context = QgsSldExportContext()
+            text = sld.for_geoserver(layer.exportSldStyleV3(context).toString())
+            target = Path(chosen) / f"{layer_def.name}.sld"
+            try:
+                target.write_text(text, encoding="utf-8")
+            except OSError as exc:
+                self._warn(f"Kunde inte spara {target.name}: {exc}")
+                return None
+            written.append(target)
+        self._info(f"Sparade {len(written)} stilfiler (SLD) för GeoServer i {chosen}. Lagrens namn i GeoServer ska "
+                   "vara tabellernas namn, och geometrikolumnen heter geom.")
+        return written
 
     def verify_archive(self) -> Optional["archive.VerifyReport"]:
         """Räknar om kontrollsummorna i ett arkivpaket och visar om något ändrats."""

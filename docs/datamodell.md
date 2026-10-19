@@ -19,7 +19,7 @@ version **2.2**. Modellen finns i koden i `rita_oversiktsplan/core/model.py`.
 | `oversiktsplan_underlag`, `oversiktsplan_underlag_underlag` | Planens underlag (fliken *Underlag* i Planens uppgifter): en rad per underlagstyp med eget `underlag_id`, kopplad till sina dokument i `dokumentreferens_op` (kortnamnet är underlagstypen). Planens `underlag_id` lämnas tom, eftersom den bara kan peka på ett underlag (tolkning) |
 | `innehall_op_beror_annat_innehall`, `innehall_op_extern_referens_ri` | Kopplingar mellan innehåll och till riksintressen |
 | `beslut_op` | Beslut om planen (*beslutOP* i Lantmäteriets specifikation): diarienummer, beslutande organisation och instans (kommunfullmäktige), datum fattat, överklagat och laga kraft, arkividentitet. `oversiktsplan.beslut` pekar på antagandebeslutets objektidentitet. **Tillägg**: Boverkets mall har ingen tabell för beslut, bara kolumnen `beslut` |
-| `rita_oversiktsplan_meta` | Pluginets egen tabell: schemaversion, databasmodell, katalogversion, koordinatsystem och standardvärdena för nytt innehåll (nycklar som börjar på `standard_`) |
+| `rita_oversiktsplan_meta` | Pluginets egen tabell: schemaversion (4 sedan 0.1.3: + `precisering` i plangeometrin), databasmodell, katalogversion, koordinatsystem och standardvärdena för nytt innehåll (nycklar som börjar på `standard_`) |
 | `rita_otilldelad_yta`, `rita_otilldelad_linje`, `rita_otilldelad_punkt` | Pluginets egna tabeller: geometri som ritats men ännu inte fått innehåll. Ett objekt flyttas till rätt innehållslager när det tilldelas innehåll. Följer inte med i en leverans |
 
 **I en PostGIS-databas** (se [Användarhandledning](anvandning.md)) har schemat samma tabeller, med en kolumn `plan`
@@ -51,13 +51,22 @@ Boverkets mall har några ojämnheter. Pluginet rättar dem så här:
   SWEREF 99-zon (EPSG:3007–3018), som Lantmäteriets specifikation också tillåter. Det står i metadatan (`epsg`). I mallen har några tabeller `OBJECTID` och `Shape`, och lagret
   Plangeometri ligger i Web Mercator (EPSG:3857).
 - **Kommunnamn.** `oversiktsplan` har även kolumnen `kommunnamn`, eftersom specifikationen kräver den.
+- **Plangeometri.** `innehall_op_plangeometri` har kolumnerna `objektidentitet` och `vertikal_avgransning`, som
+  mallen saknar men specifikationen har för allt innehåll. Precis som i mallen har den `precisering` (från schema 4;
+  tidigare saknades den av misstag) men inte kompletterande innehållstyp. *Område* har varken precisering eller
+  kompletterande innehållstyp, som i mallen.
 - **Typer.** Datum lagras som datum, ja/nej-fält som booleska fält, och `digitalt_ursprung` som ja/nej (text i
-  mallen). Presentationsskalan är ett heltal, som i specifikationen.
+  mallen). Presentationsskalan är ett heltal, som i specifikationen. I `dokumentreferens_op` har mallen fälten
+  `identitet`, `namespace` och `lank` som heltal (MEDIUMINT); här är de text, eftersom en länk är en webbadress och
+  identiteten i specifikationen är en teckensträng.
 - **Borttaget.** Restkolumnerna `dokument_id1`, `planhandelse_datum1` och `GlobalID` finns inte med. Inte heller
   `anvandningsstatus`, som togs bort ur ÖP-katalogen i version 2.0, eller `texttyp_lookup`, som ersatts av
   `avsnittstyp_varde_lookup`.
 - **Uppslagstabellerna** har samma kolumner överallt och fylls med värden ur den medföljande ÖP-katalogen 2.2. Mallen
   har värden ur version 2.0, med radbrytningar i vissa värden och id:n i olika format.
+- **Jämförelse med mallfilen.** Pluginets fil har jämförts med Boverkets `databasmodell_op_0.3.gpkg` (hämtad
+  2026-10-19), tabell för tabell och kolumn för kolumn. Alla mallens tabeller finns (utom `texttyp_lookup`, se
+  ovan), med samma kolumnnamn. Skillnaderna är de som står i den här listan.
 - **Behållet som i mallen:** tabellnamnet `avsnittsbokmärke` (med ä) och kolumnnamnen `beror_annat_innehal_uuid` och
   `dokumentreferns_id` (felstavade i mallen). De behålls för att filen ska stämma med Boverkets modell.
 
@@ -69,6 +78,12 @@ med `python tools/update_opkatalog.py`. Text och bild i API:et omfattas av CC0 e
 När en plan skapas kopieras katalogens värden in i planens uppslagstabeller. Planen behåller sedan den
 katalogversionen, även om pluginet senare får en nyare katalog. Boverket säger att en plan får fortsätta i den
 katalogversion som arbetet påbörjades i.
+
+## Pluginets eget fält i utvecklingsinriktningens linjer
+
+`innehall_op_utvecklingsinriktning_line` har kolumnen `rita_pilar` (från schema 4), som inte finns i Boverkets mall:
+pilspetsarna i kartan (*slut*, *start*, *båda* eller *ingen*; tomt betyder temats standard). Den följer inte med i
+exporten till Lantmäteriet.
 
 ## Kopplingar (0.1.1)
 

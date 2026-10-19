@@ -12,11 +12,15 @@ mönsterfyllningar, SVG-bilder eller typsnittssymboler.
 kantlinje (strecktyp och tjocklek) som också används för linjer, och en egen punktform. Då ser man vilken grupp ett
 objekt hör till. Värdena inom gruppen har samma symbol och skiljs åt med färgen (översvämning blå, ras röd …).
 
-  * **Mark- och vattenanvändning** är grunden: heltäckande färg och tunn streckad kant (gränserna är illustrativa).
+  * **Mark- och vattenanvändning** är grunden: färg som täcker till 80 procent (bakgrundskartan anas) och tunn kant.
     Färgerna utgår från Boverkets färger för detaljplanens användningsområden (samma färgkoder som i Rita
     Detaljplan): Bostadsbebyggelse som B (gul), Verksamheter som Z (beige), Vatten som W (blå) osv. Där detaljplanens
     färger ligger för nära varandra, eller detaljplanen saknar motsvarighet, har värdet fått en egen färg i samma
     färgfamilj. Värdena skiljs åt med färgen (ΔE00 minst 8,5, se :mod:`colors`).
+  * **Utvecklingsinriktningen** är ett schema för hela kommunen, som i flera kommuners digitala översiktsplaner
+    (Hudiksvall, Bromölla, Danderyd): en färg per tema (den kompletterande utvecklingsinriktningen), breda
+    halvgenomskinliga band med pilspets, noder som ringar, och storleken efter sambandsnivån (se
+    ``DEVELOPMENT_LEVELS``). Det är byggt för att läsas i skala 1:100 000–1:400 000.
   * **Övrigt innehåll** ligger ovanpå som överlägg: gruppens kant i värdets färg och en svag, genomskinlig fyllning.
   * **Underlag** som kommunen redovisar men inte själv ställer sig bakom (riksintressen enligt miljöbalken) ritas
     utan fyllning och med ihålig punkt.
@@ -47,6 +51,9 @@ FARGER: dict[str, RGB] = {
 }
 
 OVERLAY_ALPHA = 46  # fyllningens täckning för överlägg, av 255 (ca 18 %)
+LAND_USE_ALPHA = 204  # markanvändningens täckning (80 %), så att bakgrundskartan anas
+DETAIL_SCALE = 25_000  # punkter och linjer utom utvecklingsinriktningen syns först från 1:25 000
+LABEL_SCALE = 100_000  # namnen syns från 1:100 000 (utvecklingsinriktningens namn alltid)
 UNASSIGNED_COLOR: RGB = (230, 81, 0)
 MIN_DELTA_E_LAND_USE = 8.5
 
@@ -75,10 +82,11 @@ class Style:
 
 
 GROUPS: dict[str, Group] = {
-    "markochvattenanvandning": Group("2;1", 0.26, "circle", label="tunn streckad kant, fylld cirkel"),
+    "markochvattenanvandning": Group("", 0.2, "circle", label="tunn heldragen kant, fylld cirkel"),
     "plangeometri": Group("8;2;1;2", 1.0, "square", hollow=True, label="kraftig streck-prick, ingen fyllning"),
     "omrade": Group("0.5;1", 0.4, "square", hollow=True, label="tät prickad, ingen fyllning"),
-    "utvecklingsinriktning": Group("4;1.5", 1.0, "star", label="kraftig streckad, stjärna"),
+    "utvecklingsinriktning": Group("", 1.0, "circle", hollow=True, ring=True,
+                                   label="mjuk kant, breda band med pilspets, nod som ring kring en prick"),
     "riksintressenop": Group("", 0.8, "triangle", label="heldragen, triangel"),
     "riksintressen": Group("2;1.5", 0.5, "triangle", hollow=True,
                            label="tunn streckad, ingen fyllning, ihålig triangel"),
@@ -167,9 +175,9 @@ STYLES: dict[str, dict[str, Style]] = {
     "omrade": _colors({"Område": (107, 111, 117)}),
     # Utvecklingsinriktningen skiljs åt med den kompletterande utvecklingsinriktningen (se FIELD nedan).
     "utvecklingsinriktning": _colors({
-        "Bebyggelsestruktur": (226, 85, 58),
+        "Bebyggelsestruktur": (232, 118, 22),  # orange, som bebyggelsen i kommunernas scheman
         "Grön- och blåstruktur": (46, 139, 87),
-        "Kommunikation": (70, 90, 110),
+        "Kommunikation": (84, 90, 102),  # mörkgrå
         "Annan utvecklingsinriktning": (142, 68, 173),
     }),
     "markochvattenanvandning": MARK_OCH_VATTEN,
@@ -218,6 +226,60 @@ STYLES: dict[str, dict[str, Style]] = {
 # utvecklingsinriktningarna åt är den kompletterande utvecklingsinriktningen (nivån under i ÖP-katalogen).
 FIELD: dict[str, str] = {"utvecklingsinriktning": "kompletterandeInnehallstyp"}
 DEFAULT_FIELD = "innehallstyp_varde"
+
+
+# Utvecklingsinriktningens storlek efter sambandsnivå (ÖP-katalogen): tre steg, eftersom skillnaden mellan
+# internationell, nationell och regional nivå inte syns i en kommunkarta. Utan sambandsnivå räknas som lokal.
+LEVEL_FIELD = "sambandsniva_varde"
+DEVELOPMENT_ALPHA = 150  # banden och ytorna (ca 60 %), så att markanvändningen syns under
+DEVELOPMENT_AREA_ALPHA = 90  # ytorna (ca 35 %)
+DEVELOPMENT_NONE: Style = Style((120, 120, 120))  # utan kompletterande utvecklingsinriktning
+# Schemat är gjort för kommunkartan. Inzoomat (från 1:50 000) blir band, pilar, ringar och kanter mindre, annars tar
+# en pil på en kort linje över tätortskartan.
+DEVELOPMENT_ZOOM_SCALE = 50_000
+DEVELOPMENT_ZOOM_FACTOR = 0.45
+ARROW_FACTOR = 1.8  # pilspetsens storlek i förhållande till bandets bredd
+# Utvecklingsinriktningens ytor har en mjuk kant: fyra linjer i temats färg ovanpå varandra, från bred och svag till
+# smal och tydligare (bredd i förhållande till nivåns kant, täckning av 255). Enkla linjer, så det fungerar i SLD.
+SOFT_EDGE: tuple[tuple[float, int], ...] = ((4.0, 22), (2.6, 34), (1.5, 55), (0.6, 110))
+MIN_BAND, MIN_ARROW, MIN_NODE = 1.2, 3.0, 4.0  # mm, så att den lokala nivån syns även inzoomad
+
+
+@dataclass(frozen=True)
+class Level:
+    label: str
+    values: tuple[str, ...]
+    line_width: float  # bandets bredd i mm
+    node_size: float  # ringens diameter i mm
+    edge_width: float  # ytans kant i mm
+    include_empty: bool = False  # objekt utan sambandsnivå
+
+
+DEVELOPMENT_LEVELS: tuple[Level, ...] = (
+    Level("Internationell, nationell eller regional", ("Internationell", "Nationell", "Regional"), 5.0, 12.0, 1.6),
+    Level("Kommunal", ("Kommunal",), 3.4, 8.5, 1.1),
+    Level("Lokal eller ingen sambandsnivå", ("Lokal",), 2.0, 6.0, 0.7, include_empty=True),
+)
+
+# Pilspetsar på utvecklingsinriktningens linjer, efter tema: en riktning (utbyggnad, stråk, förbindelse) får en pil där man
+# slutade rita; samband i grön- och blåstrukturen går åt båda hållen.
+END, BOTH = "end", "both"
+ARROWS: dict[Optional[str], str] = {
+    "Bebyggelsestruktur": END,
+    "Grön- och blåstruktur": BOTH,
+    "Kommunikation": END,  # stråk ritas från orten och utåt; en pil i orten skulle täcka noden
+    "Annan utvecklingsinriktning": END,
+    None: END,
+}
+
+
+def arrows_for(value: Optional[str]) -> str:
+    return ARROWS.get(value, END)
+
+
+def default_arrows(theme: Optional[str]) -> tuple[bool, bool]:
+    """Temats standard: (pil där linjen slutar, pil där den börjar)."""
+    return True, arrows_for(theme) == BOTH
 
 
 def field_for(category_key: str) -> str:

@@ -29,7 +29,7 @@ from rita_oversiktsplan import classFactory  # noqa: E402
 from rita_oversiktsplan.core import checkout as co  # noqa: E402
 from rita_oversiktsplan.core import geopackage, model, storage  # noqa: E402
 from rita_oversiktsplan.core.project import (active_plan_group, draft_layers, is_read_only, layer_in_group,  # noqa: E402
-                                             load_plan, plan_storage)
+                                             load_plan, plan_storage, PlanError)
 from rita_oversiktsplan.gui.checkout_actions import CHECK_IN, DISCARD, CheckoutActions  # noqa: E402
 from rita_oversiktsplan.gui.new_plan_dialog import NewPlanDialog  # noqa: E402
 from test_plugin import FakeIface  # noqa: E402
@@ -49,6 +49,7 @@ class FakePg:
         self.checkins: list[str] = []
         self.postgis = True
         self.epsg = None  # schemats koordinatsystem, om schemat redan finns
+        self.refuse_upgrade = False  # som en användare utan rätt att ändra tabellerna
 
     def uri(self):
         return "dbname='planer' host=localhost port=5432 user='eric' sslmode=disable"
@@ -80,6 +81,12 @@ class FakePg:
             match = re.search(r"VALUES \('[^']*', 'checkout', '(.*)'\); END IF", sql)
             if "checkout" not in self.meta:
                 self.meta["checkout"] = match.group(1).replace("''", "'")
+            return []
+        if sql.startswith("DO $op") and "ADD COLUMN IF NOT EXISTS" in sql:  # uppgradering av schemat
+            if self.refuse_upgrade:
+                raise RuntimeError("must be owner of table innehall_op_plangeometri")
+            version = re.search(r"SET \"value\" = '(\d+)' WHERE \"key\" = 'schema_version'", sql).group(1)
+            self.meta["schema_version"] = version
             return []
         if sql.startswith("DO $op") and "RAISE EXCEPTION" in sql:  # incheckning
             token = re.search(r'"token": "([0-9a-f]+)"', sql).group(1)
@@ -215,7 +222,7 @@ class NewDatabasePlanTests(unittest.TestCase):
         self.assertIn('INSERT INTO "oversiktsplan"."oversiktsplan"', block)
         self.assertIn("'ÖP 2040'", block)
         self.assertIn("'Bostadsbebyggelse'", block)  # ÖP-katalogens värden följer med planen
-        self.assertIn("'schema_version', '3'", block)
+        self.assertIn(f"'schema_version', '{model.SCHEMA_VERSION}'", block)
 
     def test_a_plan_id_that_exists_is_refused(self):
         self.conn = FakePg(geopackage.create_geopackage(Path(self.tmp.name) / "d.gpkg", PLAN))
@@ -264,6 +271,52 @@ class NewDatabasePlanTests(unittest.TestCase):
         with self.assertRaises(storage.PostgisError):
             storage.create_postgis_plan("planer", "public", "op_2040", PLAN, self.conn)
         self.assertEqual(self.conn.sql, [])
+
+
+class SchemaUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+        database = geopackage.create_geopackage(Path(self.tmp.name) / "databas.gpkg", PLAN)
+        self.conn = FakePg(database)
+
+        def layer_uri(plan, table):
+            return f"{database.as_posix()}|layername={table.name}"
+
+        for patcher in (mock.patch.object(storage, "PROVIDER", "ogr"),
+                        mock.patch.object(storage.PostgisStorage, "layer_uri", layer_uri),
+                        mock.patch.object(storage, "postgis_connections", lambda: {"planer": self.conn})):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.addCleanup(QgsProject.instance().clear)
+
+    def open(self):
+        return load_plan(storage.PostgisStorage("planer", "oversiktsplan", "op_2040"), QgsProject.instance())
+
+    def test_a_schema_from_version_3_gets_the_new_column_when_a_plan_is_opened(self):
+        self.conn.meta["schema_version"] = "3"
+        self.open()
+        upgrade = next(sql for sql in self.conn.sql if "ADD COLUMN IF NOT EXISTS" in sql)
+        self.assertIn('ALTER TABLE "oversiktsplan"."innehall_op_plangeometri" ADD COLUMN IF NOT EXISTS '
+                      '"precisering" text', upgrade)
+        self.assertTrue(upgrade.startswith("DO $op$ BEGIN"))  # en transaktion
+        self.assertIn("rita_oversiktsplan_schema", upgrade)  # schemats version också
+        self.assertEqual(self.conn.meta["schema_version"], str(model.SCHEMA_VERSION))
+
+    def test_a_current_schema_is_left_alone(self):
+        self.open()
+        self.assertFalse([sql for sql in self.conn.sql if "ALTER TABLE" in sql])
+
+    def test_without_the_right_to_change_the_tables_the_plan_is_refused_with_an_explanation(self):
+        self.conn.meta["schema_version"] = "3"
+        self.conn.refuse_upgrade = True
+        with self.assertRaisesRegex(PlanError, "äldre version av pluginet"):
+            self.open()
+
+    def test_a_new_plan_in_an_old_schema_also_adds_the_column(self):
+        sql = storage.ensure_schema_sql("oversiktsplan")
+        self.assertIn('ALTER TABLE "oversiktsplan"."innehall_op_plangeometri" ADD COLUMN IF NOT EXISTS '
+                      '"precisering" text', sql)
 
 
 class OpenTests(PostgisCase):
@@ -416,6 +469,8 @@ class PluginTests(PostgisCase):
             dialog.kommun.set_kommun("Eskilstuna")
             dialog.titel.setText("ÖP Nord")
             dialog.use_postgis.setChecked(True)
+            dialog.folder.setFilePath(str(self.dir))
+            self.assertTrue(dialog.is_valid())
             return True
 
         created = []
@@ -425,6 +480,10 @@ class PluginTests(PostgisCase):
                 mock.patch.object(type(self.plugin), "_load", return_value=True):
             self.plugin.new_plan()
         self.assertEqual(created[0][:3], ("planer", "oversiktsplan", "op_nord"))
+
+    def test_the_database_button_is_shown_for_a_plan_in_the_database(self):
+        self.plugin.refresh_tools()
+        self.assertTrue(self.plugin.toolbar.act_checkout.isVisible())
 
 
 if __name__ == "__main__":

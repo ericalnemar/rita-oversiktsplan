@@ -140,7 +140,34 @@ def ensure_schema_sql(schema: str, epsg: int = model.EPSG) -> list[str]:
                               'USING gist ("geom")')
     statements.append(f"CREATE UNIQUE INDEX IF NOT EXISTS {quote(index_name(model.META_TABLE, 'plan_key'))} ON "
                       f'{quote(schema)}.{quote(model.META_TABLE)} ("plan", "key")')
+    return statements + added_columns_sql(schema)
+
+
+def added_columns_sql(schema: str) -> list[str]:
+    """Kolumner som kommit till i senare schemaversioner, för scheman som skapats tidigare (``CREATE TABLE IF NOT
+    EXISTS`` lägger inte till kolumner i en befintlig tabell)."""
+    statements = []
+    for table, columns in model.ADDED_COLUMNS.items():
+        kinds = {f.name: f.type for f in model.layer(table).fields}
+        for column in columns:
+            statements.append(f"ALTER TABLE {quote(schema)}.{quote(db_name(table))} ADD COLUMN IF NOT EXISTS "
+                              f"{quote(column)} {_SQL_TYPES[kinds[column]]}")
     return statements
+
+
+UPGRADABLE = ("3",)  # schemaversioner i databasen som pluginet kan uppgradera
+
+
+def upgrade_schema_sql(schema: str, epsg: int) -> str:
+    """Uppgraderar ett schema i databasen till pluginets schemaversion: saknade tabeller och kolumner läggs till, och
+    alla planer i schemat (de delar tabeller) får den nya versionen. En transaktion."""
+    version = literal(model.SCHEMA_VERSION)
+    parts = [statement + ";" for statement in ensure_schema_sql(schema, epsg)]
+    parts.append(f'UPDATE {quote(schema)}.{quote(model.META_TABLE)} SET "value" = {version} '
+                 "WHERE \"key\" = 'schema_version';")
+    parts.append(f'UPDATE {quote(schema)}.{quote(SCHEMA_TABLE)} SET "value" = {version} WHERE "key" = '
+                 "'schema_version';")
+    return transaction_sql(parts)
 
 
 def sql_value(value, kind: str) -> str:
@@ -364,6 +391,19 @@ class PostgisStorage(Storage):
 
     def write_meta(self, values: dict[str, str]) -> None:
         raise PostgisError("Planen ligger i databasen och är skrivskyddad. Checka ut den först.")
+
+    def upgrade(self) -> bool:
+        """Uppgraderar schemat om planen är skapad med en äldre version av pluginet. Returnerar True om något
+        ändrades. Kräver rätt att ändra tabellerna i schemat."""
+        if self.read_meta().get("schema_version") not in UPGRADABLE:
+            return False
+        try:
+            self.sql(upgrade_schema_sql(self.schema, self.epsg))
+        except PostgisError as exc:
+            raise PostgisError(f"Schemat {self.schema} är skapat med en äldre version av pluginet och behöver "
+                               "uppgraderas (en kolumn läggs till), men det gick inte. Den som har rätt att ändra "
+                               f"tabellerna i schemat behöver öppna en plan i det en gång. {exc}") from exc
+        return True
 
     def read_lookup(self, lookup: model.LookupDef) -> list[str]:
         rows = self.sql(f'SELECT {quote(lookup.value_column)} FROM {self.table(lookup.name)} '

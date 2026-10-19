@@ -26,8 +26,8 @@ from typing import Optional
 
 DATABASMODELL = "0.3"  # Boverkets GIS-databasmodell som tabellerna följer
 SPEC_VERSION = "test 4"  # Lantmäteriets nationella specifikation för översiktsplan
-SCHEMA_VERSION = 3  # pluginets egen schemaversion (1: grundtabellerna; 2: + otilldelad geometri, standardvärden;
-# 3: + beslut_op)
+SCHEMA_VERSION = 4  # pluginets egen schemaversion (1: grundtabellerna; 2: + otilldelad geometri, standardvärden;
+# 3: + beslut_op; 4: + precisering i plangeometrin och rita_pilar i utvecklingsinriktningens linjer)
 EPSG = 3006  # SWEREF 99 TM, som i Boverkets mall; standard för nya planer
 # Lantmäteriets geometri 2.0.1 (koordinatsystemPlan) tillåter SWEREF 99 TM och de tolv lokala zonerna
 EPSG_CODES = tuple(range(3006, 3019))
@@ -193,9 +193,19 @@ def _innehall(category: Category) -> tuple[FieldDef, ...]:
         FieldDef("planhandelse_datum", DATE, "Datum för planhändelsen", required=True),
         FieldDef("dokument_id", TEXT, "Dokument", length=38, hidden=True),
     ]
-    if category.key in ("plangeometri", "omrade"):  # mallen har inte kompletterande innehållstyp eller precisering här
+    # Boverkets mall har inte kompletterande innehållstyp i Plangeometri och Område, och inte precisering i Område
+    if category.key == "plangeometri":
+        fields = [f for f in fields if f.name != "kompletterandeInnehallstyp"]
+    elif category.key == "omrade":
         fields = [f for f in fields if f.name not in ("kompletterandeInnehallstyp", "precisering")]
     return (*fields, *category.extra)
+
+
+# Pluginets eget fält (inte i Boverkets mall, följer inte med i exporten): pilspetsarna på utvecklingsinriktningens
+# linjer. Tomt = temats standard (se styles.ARROWS).
+ARROW_FIELD = "rita_pilar"
+ARROW_END, ARROW_START, ARROW_BOTH, ARROW_NONE = "slut", "start", "båda", "ingen"
+_ARROWS = FieldDef(ARROW_FIELD, TEXT, "Pilspetsar", choices=(ARROW_END, ARROW_START, ARROW_BOTH, ARROW_NONE))
 
 
 def content_layers() -> tuple[LayerDef, ...]:
@@ -206,7 +216,10 @@ def content_layers() -> tuple[LayerDef, ...]:
                 continue
             name = f"innehall_op_{category.key}" + ("" if category.polygon_only else f"_{suffix}")
             alias = category.alias if category.polygon_only else f"{category.alias} ({word})"
-            layers.append(LayerDef(name, alias, geometry, _innehall(category), category))
+            fields = _innehall(category)
+            if category.key == "utvecklingsinriktning" and suffix == "line":
+                fields = (*fields, _ARROWS)
+            layers.append(LayerDef(name, alias, geometry, fields, category))
     return tuple(layers)
 
 
@@ -282,6 +295,9 @@ BESLUT = LayerDef("beslut_op", "Beslut", None, (
 
 LAYERS: tuple[LayerDef, ...] = (OVERSIKTSPLAN, *CONTENT_LAYERS, *DOCUMENT_TABLES, BESLUT, *DRAFT_LAYERS.values())
 ADDED_TABLES: tuple[LayerDef, ...] = (*DRAFT_LAYERS.values(), BESLUT)  # läggs till i planer från äldre versioner
+# kolumner som lagts till i befintliga tabeller (schema 4), läggs till i planer från äldre versioner
+ADDED_COLUMNS: dict[str, tuple[str, ...]] = {"innehall_op_plangeometri": ("precisering",),
+                                             "innehall_op_utvecklingsinriktning_line": (ARROW_FIELD,)}
 
 
 def layer(name: str) -> LayerDef:

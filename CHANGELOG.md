@@ -4,6 +4,42 @@ Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/), versi
 
 ## Ej utgivet
 
+## [0.1.3] – kartan: utvecklingsinriktning, pilar, namn och skalor
+
+Efter en genomgång av fjorton kommuners digitala översiktsplaner (se [Symbologi](docs/symbologi.md)).
+
+- **Utvecklingsinriktningen är ett schema för hela kommunen.** Färgen visar temat (orange bebyggelsestruktur, grön
+  grön- och blåstruktur, mörkgrå kommunikation, lila annan), storleken visar sambandsnivån i tre steg (regional och
+  större, kommunal, lokal). Linjer är breda halvgenomskinliga band, punkter är ringar kring en prick, ytor har en svag
+  fyllning och en mjuk, luddig kant (fyra halvgenomskinliga linjer, fungerar i GeoServer). Gjort för skala
+  1:100 000–1:400 000.
+- **Pilspetsar** på utvecklingsinriktningens linjer, styrda av temat: en pil där man slutade rita (bebyggelse,
+  kommunikation, annan), pilar i båda ändar för samband i grön- och blåstrukturen.
+- **Rätt ritordning:** i lagerpanelen ligger punkt överst, sedan linje och yta underst i varje innehållstyp, så att
+  ytor inte längre täcker linjer och punkter. Mark- och vattenanvändningen ligger sist, under de genomskinliga
+  tilläggen (riksintressen, risker …), som den tidigare täckte.
+- **Välj pilspetsar själv:** för utvecklingsinriktning som linje har *Tilldela innehåll* kryssrutorna *Pilspets: där
+  linjen slutar / där linjen börjar*. Förvalt är temats standard. Valet sparas i pluginets eget fält `rita_pilar`,
+  som inte följer med i exporten.
+- **Mindre schema inzoomat:** från 1:50 000 blir band, pilar och ringar ungefär hälften så stora (med ett minsta
+  mått), så att en pil på en kort linje inte tar över tätortskartan.
+- **Namn i kartan:** innehållets namn visas som etikett (utvecklingsinriktningens alltid, övrigas från 1:100 000).
+- **Nytt: Dölj texter** i verktygsfältet (som i Rita Detaljplan): släcker namnen på kartan i alla öppna planer så
+  länge knappen är intryckt, även i planer som öppnas under tiden.
+- **Detaljer först när man zoomat in:** punkter och linjer (utom utvecklingsinriktningen) syns från 1:25 000.
+- **Mark- och vattenanvändningen täcker till 80 procent** och har en tunn heldragen kant, så att bakgrundskartan anas.
+- **Plangeometrin har kolumnen precisering**, som i Boverkets mall (den saknades av misstag). Planer från tidigare
+  versioner uppgraderas när de öppnas: en fil direkt, ett schema i databasen första gången en plan i det öppnas
+  (kräver rätt att ändra tabellerna). Pluginets schemaversion är nu 4.
+- **Jämfört med Boverkets mallfil:** pluginets GeoPackage är jämförd tabell för tabell med Boverkets
+  `databasmodell_op_0.3.gpkg`. Skillnaderna står i [Datamodell](docs/datamodell.md).
+- **Projektfilen sparas direkt när en ny plan skapas** (som i Rita Detaljplan): som `filnamn.qgz` i samma mapp som
+  planfilen, om projektet inte redan är sparat. För en plan i databasen frågar dialogen därför också efter filnamn och
+  mapp för projektfilen.
+- **Databasknappen (Checka ut/in) syns bara för planer i en databas**, som i Rita Detaljplan.
+- **Nytt: Spara stilar för GeoServer (SLD)…** i menyn. En stilfil per innehållslager, där pilspetsarna är omgjorda
+  till GeoServers form. Inte provat i en riktig GeoServer.
+
 ## [0.1.2] – dialogen Leverans och export med rutor
 
 - **Dialogen Leverans och export är uppbyggd som i Rita Detaljplan.** Kontrollen står i en egen blå ruta överst, och

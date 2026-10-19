@@ -16,7 +16,7 @@ Verktygsfältet **Rita Översiktsplan**, från vänster:
 |---|---|
 | Karta med grönt plus | **Ny översiktsplan…** (se nedan) |
 | Mapp | **Öppna översiktsplan…**: lägger till en plan som du skapat tidigare i kartan, från en fil eller en databas |
-| Databas med pil ned/upp | **Checka ut / Checka in**: för en plan i en PostGIS-databas (se nedan) |
+| Databas med pil ned/upp | **Checka ut / Checka in**: för en plan i en PostGIS-databas (se nedan). Syns bara när planen ligger i en databas |
 | Penna | **Börja redigera**: öppnar alla planens lager för redigering |
 | Diskett | **Avsluta redigering**: frågar om ändringarna ska sparas eller kastas och avslutar redigeringen |
 | Skrivplatta | **Planens uppgifter**: planen, planhändelsen, beslutet och standardvärden för nytt innehåll |
@@ -24,6 +24,7 @@ Verktygsfältet **Rita Översiktsplan**, från vänster:
 | Dokument med grön etikett | **Skapa bokmärken i planhandling**: öppnar programmet som kopplar textavsnitten i Word till planens innehåll (se nedan) |
 | Yta med muspekare | **Markera**: klicka eller dra en rektangel för att markera planens innehåll |
 | Streckad yta med rött kryss | **Avmarkera alla** |
+| Bokstäver med rött streck | **Dölj texter**: släcker namnen på kartan i alla öppna planer så länge knappen är intryckt (som i Rita Detaljplan) |
 | Orange streckad yta | **Rita yta** |
 | Orange streckad linje | **Rita linje** |
 | Orange punkt | **Rita punkt** |
@@ -52,7 +53,8 @@ verktygsfältet, och öppna **Om Rita Översiktsplan…** med version, licens, e
    - **Planens titel**, till exempel *Översiktsplan 2040*.
    - **Lagras i**: **lokal fil** (GeoPackage) eller **PostGIS-databas**. Databasen går bara att välja om QGIS har
      sparade PostgreSQL-anslutningar.
-   - För en fil: **Filnamn** (föreslås utifrån titeln) och **Spara i mapp**.
+   - **Filnamn** (föreslås utifrån titeln) och **Spara i mapp**. För en fil sparas planen där som `.gpkg`; i båda
+     fallen sparas också QGIS-projektet där som `.qgz`, med samma namn.
    - För en databas: **Anslutning** (en av QGIS sparade PostgreSQL-anslutningar), **Schema** (delas av flera
      planer: finns det redan läggs planen till där, annars skapas det) och **Plan-id** (föreslås utifrån titeln;
      gemener a–z, siffror och understreck).
@@ -64,6 +66,10 @@ verktygsfältet, och öppna **Om Rita Översiktsplan…** med version, licens, e
 
 Pluginet skapar en GeoPackage-fil (en databas i en enda fil) med samma tabeller som Boverkets GIS-databasmodell för
 ÖP-modellen, och lägger till planen överst i lagerpanelen i gruppen **Översiktsplan – *titeln***.
+
+**Projektfilen sparas direkt** (som i Rita Detaljplan): har du inte sparat QGIS-projektet förut sparas det som
+`filnamn.qgz` i samma mapp, så att du inte behöver spara det separat. Är projektet redan sparat som något annat (du
+lägger till planen i ett befintligt projekt) rörs det inte; spara det som vanligt.
 
 ## Planens uppgifter
 
@@ -224,6 +230,21 @@ bort de rubriker planen inte behöver. Rubrikerna är valda så att Skapa bokmä
 Innehåll utan geometri syns inte i QGIS karta, men finns i gruppens ytlager (i attributtabellen) och i listan i
 Skapa bokmärken i planhandling.
 
+## Kartan
+
+Symbolerna är pluginets förslag (Boverket styr inte hur en översiktsplan visas), se [Symbologi](symbologi.md). I
+korthet:
+
+- **Mark- och vattenanvändningen** är grunden, med färger lånade från detaljplanen.
+- **Utvecklingsinriktningen** är ett schema för hela kommunen: färgen visar temat (bebyggelse, grön- och blåstruktur,
+  kommunikation), storleken visar **sambandsnivån**, och linjer har en **pilspets** där man slutade rita. Rita därför
+  stråk och utbyggnadsriktningar från orten och utåt. Samband i grön- och blåstrukturen får pilar i båda ändar. Vill
+  du något annat kryssar du i *Tilldela innehåll*: **Pilspets där linjen slutar** och/eller **där linjen börjar**.
+  Inzoomat (från 1:50 000) blir schemat mindre.
+- **Namnet** du ger innehållet i *Tilldela innehåll* visas i kartan. Knappen **Dölj texter** släcker namnen tillfälligt.
+- **Punkter och linjer** (utom utvecklingsinriktningen) syns först från 1:25 000.
+- **Stilfiler för GeoServer:** *Insticksprogram → Rita Översiktsplan → Spara stilar för GeoServer (SLD)…*.
+
 ## Planens lager
 
 I gruppen **Översiktsplan – *titeln*** finns:
@@ -231,8 +252,11 @@ I gruppen **Översiktsplan – *titeln*** finns:
 - **Översiktsplan**: tabellen med planens uppgifter (en rad).
 - **Att tilldela**: det du ritat men ännu inte gett innehåll, en yta, en linje och en punkt.
 - **Plangeometri** och **Område**: ytor.
-- En undergrupp per innehållstyp, till exempel **Mark- och vattenanvändning**, med tre lager: **yta**, **linje** och
-  **punkt**.
+- En undergrupp per innehållstyp med tre lager: **punkt**, **linje** och **yta**, i den ordningen, så att ytor inte
+  täcker linjer och punkter (det översta lagret i lagerpanelen ritas överst). **Mark- och vattenanvändning**, som är
+  grunden och nästan täckande, ligger sist, under de genomskinliga tilläggen. Ordningen gäller när planen läggs till i
+  kartan; ett projekt som sparats med en tidigare version behåller sin ordning (dra om lagren, eller ta bort planen
+  ur projektet och öppna den igen).
 - **Beslut, dokument och underlag**: antagandebeslutet och tabeller för hänvisningar till planhandlingen och
   underlagen.
 

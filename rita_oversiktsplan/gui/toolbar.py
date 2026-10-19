@@ -40,6 +40,9 @@ IMPORT_TIP = ("Importera geometri: kopierar ytor, linjer och punkter från ett a
               "Att tilldela, utan attribut")
 ASSIGN_TIP = ("Tilldela innehåll: klicka på en ritad yta, linje eller punkt och välj grupp och innehållstyp. "
               "Klicka på tilldelat innehåll för att byta typ.")
+HIDE_LABELS_TIP = ("Dölj texter: stänger tillfälligt av namnen på kartan så att de inte ligger i vägen när du ritar. "
+                   "Klicka igen för att visa dem.")
+SHOW_LABELS_TIP = "Texterna är dolda. Klicka för att visa namnen på kartan igen."
 RELATE_TIP = ("Berör annat innehåll: klicka på ett innehåll och sedan på det innehåll det berör (klicka igen för att ta "
               "bort kopplingen). Det berörda visas i blått. Högerklick eller Esc väljer ett nytt innehåll.")
 COPY_TIP = ("Kopiera innehåll: klicka på ett objekt med innehåll och sedan på de objekt som ska få samma innehåll "
@@ -74,6 +77,9 @@ class PlanToolBar(QToolBar):
         self.addSeparator()
         self.act_select = self._toggle("select.svg", "Markera", h.set_selecting, SELECT_TIP)
         self.act_deselect = self._action("deselect.svg", "Avmarkera alla", h.deselect_all, DESELECT_TIP)
+        self.act_hide_labels = self._toggle("labels.svg", "Dölj texter", h.set_labels_hidden, HIDE_LABELS_TIP)
+        self.act_hide_labels.toggled.connect(
+            lambda hidden: self.act_hide_labels.setToolTip(SHOW_LABELS_TIP if hidden else HIDE_LABELS_TIP))
         self.addSeparator()
         self.act_draw = {suffix: self._action(DRAW_ICONS[suffix], DRAW_TEXTS[suffix],
                                               lambda s=suffix: h.draw(s), DRAW_TIPS[suffix])
@@ -90,20 +96,22 @@ class PlanToolBar(QToolBar):
         self.set_checkout_state(checkout_state if has_plan else "none")
         self.act_start.setEnabled(has_plan and not editing)
         self.act_stop.setEnabled(has_plan and editing)
-        for action in (self.act_info, self.act_export, self.act_document, self.act_select, self.act_deselect):
+        for action in (self.act_info, self.act_export, self.act_document, self.act_select, self.act_deselect,
+                       self.act_hide_labels):
             action.setEnabled(has_plan)
         for action in (*self.act_draw.values(), self.act_import, self.act_assign, self.act_copy, self.act_relate):
             action.setEnabled(has_plan and editing)
 
     def set_checkout_state(self, state: str) -> None:
-        """Knappen visar Checka ut för en plan i databasen och Checka in för en utcheckad plan. För en plan i en fil
-        är den avstängd."""
+        """Knappen visar Checka ut för en plan i databasen och Checka in för en utcheckad plan. För en plan i en fil,
+        och utan plan, syns den inte (som i Rita Detaljplan)."""
         checked_out = state == "local"
         self.act_checkout.setIcon(icon("checkin.svg" if checked_out else "checkout.svg"))
         self.act_checkout.setText("Checka in" if checked_out else "Checka ut")
         self.act_checkout.setToolTip(CHECKIN_TIP if checked_out else CHECKOUT_TIP if state == "database"
                                      else CHECKOUT_FILE_TIP if state == "file" else CHECKOUT_TIP)
         self.act_checkout.setEnabled(state in ("local", "database"))
+        self.act_checkout.setVisible(state in ("local", "database"))
 
     def _action(self, icon_name: str, text: str, callback, tip: str = "") -> QAction:
         action = QAction(icon(icon_name), text, self)

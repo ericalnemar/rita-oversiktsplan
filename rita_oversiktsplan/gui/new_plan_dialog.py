@@ -57,15 +57,22 @@ class NewPlanDialog(QDialog):
         where.addStretch(1)
 
         self.filnamn = QLineEdit()
-        self.filnamn.setToolTip("Namnet på GeoPackage-filen. Föreslås utifrån titeln.")
+        self.filnamn.setToolTip("Namnet på planfilen (.gpkg) och QGIS-projektfilen (.qgz), som sparas direkt. "
+                                "Föreslås utifrån titeln.")
         self._filnamn_edited = False
         self.folder = QgsFileWidget()
         self.folder.setStorageMode(QgsFileWidget.StorageMode.GetDirectory)
+        self.folder.setToolTip("Mappen där planfilen och projektfilen sparas. För en plan i databasen sparas bara "
+                               "projektfilen här.")
         self.file_box = QWidget()
         file_form = QFormLayout(self.file_box)
         file_form.setContentsMargins(0, 0, 0, 0)
         file_form.addRow("Filnamn", self.filnamn)
         file_form.addRow("Spara i mapp", self.folder)
+        self.file_note = QLabel("Planen sparas som .gpkg och QGIS-projektet som .qgz i mappen.")
+        self.file_note.setWordWrap(True)
+        self.file_note.setEnabled(False)  # dämpad färg
+        file_form.addRow("", self.file_note)
 
         self.connection = QComboBox()
         for name in sorted(self._connections):
@@ -148,7 +155,9 @@ class NewPlanDialog(QDialog):
     def _on_storage_changed(self, *_) -> None:
         database = self.is_postgis()
         self.postgis_box.setVisible(database)
-        self.file_box.setVisible(not database)
+        # filnamnet och mappen gäller projektfilen även när planen ligger i databasen
+        self.file_note.setText("QGIS-projektet sparas som .qgz i mappen; planen ligger i databasen." if database
+                               else "Planen sparas som .gpkg och QGIS-projektet som .qgz i mappen.")
         if database and not self._schema_edited and not self.schema.text():
             self.schema.setText(DEFAULT_SCHEMA)  # ett schema som delas av kommunens översiktsplaner
         self._update_ok()
@@ -165,10 +174,12 @@ class NewPlanDialog(QDialog):
     def is_valid(self) -> bool:
         if not (self.kommun.selected() is not None and self.titel.text().strip()):
             return False
+        has_file = bool(safe_filename(self.filnamn.text()) and self.folder.filePath().strip())
         if self.is_postgis():
-            return bool(self.connection.currentData() and storage.is_valid_schema(self.schema.text().strip())
-                        and storage.is_valid_plan_id(self.plan_id.text().strip()))
-        return bool(safe_filename(self.filnamn.text()) and self.folder.filePath().strip())
+            return has_file and bool(self.connection.currentData() and
+                                     storage.is_valid_schema(self.schema.text().strip()) and
+                                     storage.is_valid_plan_id(self.plan_id.text().strip()))
+        return has_file
 
     # -- resultat ---------------------------------------------------------------------------------------------------
     def database_target(self) -> tuple[str, str, str]:
@@ -177,6 +188,10 @@ class NewPlanDialog(QDialog):
 
     def target(self) -> Path:
         return Path(self.folder.filePath()) / f"{safe_filename(self.filnamn.text())}.gpkg"
+
+    def project_file(self) -> Path:
+        """QGIS-projektfilen, som sparas direkt när planen skapats (samma namn och mapp som planfilen)."""
+        return Path(self.folder.filePath()) / f"{safe_filename(self.filnamn.text())}.qgz"
 
     def epsg(self) -> int:
         return int(self.crs.currentData())

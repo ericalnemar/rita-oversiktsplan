@@ -18,7 +18,7 @@ from .project import draft_layers, layer_in_group, plan_storage
 
 # Fält som tilldelningsdialogen fyller i; resten kommer från standardvärdena och planen.
 CONTENT_FIELDS = ("innehallstyp_varde", "kompletterandeInnehallstyp", "namn", "precisering", "sambandsniva_varde",
-                  "utbyggnadsordning", "objektidentitet_ri")
+                  "utbyggnadsordning", "objektidentitet_ri", "rita_pilar")
 
 
 @dataclass(frozen=True)

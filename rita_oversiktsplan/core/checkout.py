@@ -338,6 +338,7 @@ def check_in(group) -> tuple[Path, bool]:
     if is_editing(group):
         raise CheckoutError("Avsluta redigeringen (spara eller kasta ändringarna) först.")
     try:
+        plan.upgrade()  # schemat kan vara från en äldre version än den utcheckade kopian
         plan.sql(check_in_sql(plan, token, path))
     except PostgisError as exc:
         raise CheckoutError(f"Kunde inte checka in planen: {exc}") from exc

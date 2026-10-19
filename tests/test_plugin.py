@@ -103,7 +103,8 @@ class PluginTests(unittest.TestCase):
         texts = [a.text() for a in self.iface.menus[MENU].actions() if not a.isSeparator()]
         self.assertEqual(texts, ["Ny översiktsplan…", "Öppna översiktsplan…", "Importera geometri…", "Planens uppgifter…",
                                  "Leverans och export…", "Skapa arkivpaket…", "Kontrollera arkivpaket…",
-                                 "Inställningar för leverans till NGP…", "Skapa bokmärken i planhandling…", "Spara alla redigeringar", "Rita Översiktsplan",
+                                 "Inställningar för leverans till NGP…", "Spara stilar för GeoServer (SLD)…",
+                                 "Skapa bokmärken i planhandling…", "Spara alla redigeringar", "Rita Översiktsplan",
                                  "Om Rita Översiktsplan…"])
 
     def test_the_toolbar_has_plan_draw_assign_info_and_save_buttons(self):
@@ -113,7 +114,7 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(texts, ["Ny översiktsplan…", "Öppna översiktsplan…", "Checka ut", "Börja redigera",
                                  "Avsluta redigering",
                                  "Planens uppgifter", "Leverans och export", "Skapa bokmärken i planhandling", "Markera",
-                                 "Avmarkera alla", "Rita yta", "Rita linje", "Rita punkt", "Importera geometri",
+                                 "Avmarkera alla", "Dölj texter", "Rita yta", "Rita linje", "Rita punkt", "Importera geometri",
                                  "Tilldela innehåll", "Kopiera innehåll", "Berör annat innehåll"])
         for action in toolbar.actions():
             if not action.isSeparator():
@@ -136,13 +137,42 @@ class PluginTests(unittest.TestCase):
 
     def test_a_new_plan_is_created_and_loaded_into_the_map(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-            target = Path(tmp) / "op.gpkg"
+            target, qgz = Path(tmp) / "op.gpkg", Path(tmp) / "op.qgz"
+            QgsProject.instance().clear()
             with mock.patch.object(NewPlanDialog, "exec", return_value=True), \
                     mock.patch.object(NewPlanDialog, "target", return_value=target), \
+                    mock.patch.object(NewPlanDialog, "project_file", return_value=qgz), \
                     mock.patch.object(NewPlanDialog, "plan", return_value=PLAN):
                 self.plugin.new_plan()
             self.assertTrue(target.exists())
             self.assertIsNotNone(find_plan_group(QgsProject.instance(), target))
+            self.assertTrue(qgz.exists())  # projektet sparas direkt, som i Rita Detaljplan
+            self.assertEqual(Path(QgsProject.instance().fileName()), qgz)
+            self.assertIn("op.qgz", self.iface.last_message())
+            QgsProject.instance().clear()
+
+    def test_a_plan_added_to_a_saved_project_leaves_the_project_file_alone(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            existing = Path(tmp) / "befintligt.qgz"
+            QgsProject.instance().clear()
+            self.assertTrue(QgsProject.instance().write(str(existing)))
+            qgz = Path(tmp) / "op.qgz"
+            with mock.patch.object(NewPlanDialog, "exec", return_value=True), \
+                    mock.patch.object(NewPlanDialog, "target", return_value=Path(tmp) / "op.gpkg"), \
+                    mock.patch.object(NewPlanDialog, "project_file", return_value=qgz), \
+                    mock.patch.object(NewPlanDialog, "plan", return_value=PLAN):
+                self.plugin.new_plan()
+            self.assertFalse(qgz.exists())
+            self.assertEqual(Path(QgsProject.instance().fileName()), existing)
+            QgsProject.instance().clear()
+
+    def test_the_database_button_is_hidden_for_a_plan_in_a_file(self):
+        self.assertFalse(self.plugin.toolbar.act_checkout.isVisible())  # ingen plan
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            path = geopackage.create_geopackage(Path(tmp) / "op.gpkg", PLAN)
+            load_plan(path, QgsProject.instance())
+            self.plugin.refresh_tools()
+            self.assertFalse(self.plugin.toolbar.act_checkout.isVisible())
             QgsProject.instance().clear()
 
     def test_an_existing_file_gives_a_warning_and_is_left_alone(self):
@@ -151,6 +181,7 @@ class PluginTests(unittest.TestCase):
             target.write_bytes(b"x")
             with mock.patch.object(NewPlanDialog, "exec", return_value=True), \
                     mock.patch.object(NewPlanDialog, "target", return_value=target), \
+                    mock.patch.object(NewPlanDialog, "project_file", return_value=Path(tmp) / "op.qgz"), \
                     mock.patch.object(NewPlanDialog, "plan", return_value=PLAN):
                 self.plugin.new_plan()
             self.assertEqual(target.read_bytes(), b"x")
@@ -398,6 +429,19 @@ class PlanCommandTests(unittest.TestCase):
 
 
 class UpgradeTests(unittest.TestCase):
+    def test_a_plan_from_version_3_gets_precisering_in_the_plan_geometry(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            path = geopackage.create_geopackage(Path(tmp) / "schema3.gpkg", PLAN)
+            with closing(sqlite3.connect(path)) as con:  # gör filen till schema 3
+                con.execute('ALTER TABLE "innehall_op_plangeometri" DROP COLUMN "precisering"')
+                con.execute(f"UPDATE {model.META_TABLE} SET value = '3' WHERE key = 'schema_version'")
+                con.commit()
+            project = QgsProject()
+            layers = load_plan(path, project)
+            self.assertGreaterEqual(layers["innehall_op_plangeometri"].fields().indexOf("precisering"), 0)
+            self.assertEqual(geopackage.read_meta(path)["schema_version"], str(model.SCHEMA_VERSION))
+            project.clear()
+
     def test_a_plan_from_the_first_version_gets_the_new_tables_when_opened(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             path = geopackage.create_geopackage(Path(tmp) / "gammal.gpkg", PLAN)
@@ -482,7 +526,15 @@ class NewPlanDialogTests(unittest.TestCase):
         if self.dialog.use_postgis.isEnabled():
             self.dialog.use_postgis.setChecked(True)
             self.assertTrue(self.dialog.postgis_box.isVisibleTo(self.dialog))
+            self.assertTrue(self.dialog.file_box.isVisibleTo(self.dialog))  # projektfilens namn och mapp
+            self.assertIn("projektet", self.dialog.file_note.text())
             self.assertEqual(self.dialog.schema.text(), "oversiktsplan")
+
+    def test_the_project_file_gets_the_same_name_and_folder_as_the_plan(self):
+        self.dialog.filnamn.setText("ÖP 2045")
+        self.dialog.folder.setFilePath(r"C:\planer")
+        self.assertEqual(self.dialog.project_file(), Path(r"C:\planer") / "ÖP_2045.qgz")
+        self.assertEqual(self.dialog.target().with_suffix(".qgz"), self.dialog.project_file())
 
     def test_filenames_keep_swedish_letters_but_not_odd_characters(self):
         self.assertEqual(safe_filename(" Översiktsplan: Västra delen / 2040 "), "Översiktsplan_Västra_delen_2040")

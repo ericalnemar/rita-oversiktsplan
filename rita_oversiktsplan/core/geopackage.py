@@ -95,9 +95,9 @@ def create_geopackage(path: str | Path, plan: Optional[NewPlan], catalog: Option
 def upgrade(path: str | Path) -> bool:
     """Lägger till det som saknas i en plan som skapats med en äldre version av pluginet. Returnerar True om filen
     ändrades. Schema 1 → 2: tabellerna för otilldelad geometri och standardvärdena för nytt innehåll; 2 → 3: tabellen
-    för beslut. Befintliga tabeller och värden rörs inte."""
+    för beslut; 3 → 4: kolumnen precisering i plangeometrin. Befintliga tabeller, kolumner och värden rörs inte."""
     meta = read_meta(path)
-    if meta.get("schema_version") not in ("1", "2"):
+    if meta.get("schema_version") not in ("1", "2", "3"):
         return False
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(int(meta.get("epsg") or model.EPSG))
@@ -107,6 +107,16 @@ def upgrade(path: str | Path) -> bool:
         for layer_def in model.ADDED_TABLES:
             if ds.GetLayerByName(layer_def.name) is None:
                 _create_table(ds, layer_def, srs)
+        for table, columns in model.ADDED_COLUMNS.items():
+            layer = ds.GetLayerByName(table)
+            if layer is None:
+                continue
+            existing = {layer.GetLayerDefn().GetFieldDefn(i).GetName().lower()
+                        for i in range(layer.GetLayerDefn().GetFieldCount())}
+            fields = {f.name: f for f in model.layer(table).fields}
+            for column in columns:
+                if column.lower() not in existing:
+                    layer.CreateField(_field_definition(fields[column]))
     finally:
         ds = None
     write_meta(path, {**{k: v for k, v in model.DEFAULT_VALUES.items() if k not in meta},
@@ -141,13 +151,17 @@ def _create_table(ds: ogr.DataSource, layer_def: model.LayerDef, srs: osr.Spatia
     layer = ds.CreateLayer(layer_def.name, srs=srs if layer_def.geometry else None,
                            geom_type=_GEOMETRY_TYPES[layer_def.geometry], options=options)
     for field in layer_def.fields:
-        ogr_type, subtype = _FIELD_TYPES[field.type]
-        definition = ogr.FieldDefn(field.name, ogr_type)
-        if subtype is not None:
-            definition.SetSubType(subtype)
-        if field.length:
-            definition.SetWidth(field.length)
-        layer.CreateField(definition)
+        layer.CreateField(_field_definition(field))
+
+
+def _field_definition(field: model.FieldDef) -> ogr.FieldDefn:
+    ogr_type, subtype = _FIELD_TYPES[field.type]
+    definition = ogr.FieldDefn(field.name, ogr_type)
+    if subtype is not None:
+        definition.SetSubType(subtype)
+    if field.length:
+        definition.SetWidth(field.length)
+    return definition
 
 
 def _create_lookup(ds: ogr.DataSource, lookup: model.LookupDef, catalog: Optional[opkatalog.Catalog]) -> None:

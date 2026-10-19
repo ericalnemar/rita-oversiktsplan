@@ -139,8 +139,22 @@ class LoadPlanTests(PlanFileCase):
         (group,) = project.plan_groups(self.project)
         mva = group.findGroup("Mark- och vattenanvändning")
         names = [child.name() for child in mva.children()]
-        self.assertEqual(names, ["Mark- och vattenanvändning (yta)", "Mark- och vattenanvändning (linje)",
-                                 "Mark- och vattenanvändning (punkt)"])
+        self.assertEqual(names, ["Mark- och vattenanvändning (punkt)", "Mark- och vattenanvändning (linje)",
+                                 "Mark- och vattenanvändning (yta)"])  # det översta ritas överst
+
+    def test_points_are_drawn_over_lines_and_lines_over_areas(self):
+        order = [layer.customProperty(project.TABLE_PROPERTY) for layer in self.project.layerTreeRoot().layerOrder()]
+        for prefix in ("innehall_op_utvecklingsinriktning", "innehall_op_klimatrelateradrisk",
+                       "innehall_op_markochvattenanvandning"):
+            self.assertLess(order.index(f"{prefix}_point"), order.index(f"{prefix}_line"))
+            self.assertLess(order.index(f"{prefix}_line"), order.index(f"{prefix}_polygon"))
+        self.assertLess(order.index("rita_otilldelad_punkt"), order.index("rita_otilldelad_yta"))
+
+    def test_land_use_is_the_bottom_of_the_plan_under_the_overlays(self):
+        order = [layer.customProperty(project.TABLE_PROPERTY) for layer in self.project.layerTreeRoot().layerOrder()]
+        land_use = order.index("innehall_op_markochvattenanvandning_polygon")
+        overlays = [t for t in order if t and t.startswith("innehall_op_") and "markochvatten" not in t]
+        self.assertTrue(all(order.index(t) < land_use for t in overlays))
         self.assertEqual(self.layers["innehall_op_markochvattenanvandning_point"].geometryType(),
                          QgsWkbTypes.GeometryType.PointGeometry)
 
@@ -202,8 +216,8 @@ class LoadPlanTests(PlanFileCase):
 
     def test_development_direction_is_classified_on_the_complementary_value(self):
         renderer = self.layers["innehall_op_utvecklingsinriktning_polygon"].renderer()
-        self.assertIn("kompletterandeInnehallstyp", renderer.classAttribute())
-        self.assertIn("Grön- och blåstruktur", [c.value() for c in renderer.categories()])
+        filters = [r.filterExpression() for r in renderer.rootRule().children()]
+        self.assertIn("\"kompletterandeInnehallstyp\" = 'Grön- och blåstruktur'", filters)
 
     def test_overlays_have_a_faint_fill_so_land_use_shows_through(self):
         renderer = self.layers["innehall_op_riksintressenop_polygon"].renderer()

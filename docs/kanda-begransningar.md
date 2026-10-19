@@ -5,6 +5,7 @@ under [Issues](https://github.com/ericalnemar/rita-oversiktsplan/issues).
 
 ## Vad som saknas
 
+- **Pilspetsarna i GeoServer är inte provade.** Stilfilerna från *Spara stilar för GeoServer (SLD)…* använder GeoServers funktioner `endPoint`/`endAngle`; vridningen är beräknad, inte provad. Etiketternas placering i GeoServer kan skilja sig från QGIS.
 - **Kartbilden är inte färdig.** Arbete pågår med hur planen visas i kartan: symbologin (färger, kantlinjer och punktsymboler per innehållstyp) och presentationen i övrigt kommer att ändras. Se [Symbologi](symbologi.md).
 - **Kontroll mot specifikationen.** Exporten kontrollerar att det som Lantmäteriets format kräver finns, men inte
   Lantmäteriets valideringsregler i NGP (de är inte genomgångna än).
@@ -39,8 +40,9 @@ under [Issues](https://github.com/ericalnemar/rita-oversiktsplan/issues).
 - **Innehåll utan geometri** syns inte i kartan; ändra eller ta bort det i gruppens attributtabell.
 - **PostGIS.** Att skapa och öppna planer i en databas och att checka ut och checka in är bara testat mot en
   låtsasdatabas. SQL:en har inte körts mot en riktig PostgreSQL med PostGIS: prova först på en testplan i ett
-  testschema. Alla planer i ett schema delar tabeller och koordinatsystem. Planer i databasen kan inte
-  uppgraderas från äldre schemaversioner (stödet är nytt i den här versionen). Skapa bokmärken i planhandling sparar inte kopplingar i en
+  testschema. Alla planer i ett schema delar tabeller och koordinatsystem. Ett schema från 0.1.0–0.1.2
+  (schema 3) uppgraderas när en plan i det öppnas första gången, vilket kräver rätt att ändra tabellerna; äldre
+  scheman än så kan inte uppgraderas. Skapa bokmärken i planhandling sparar inte kopplingar i en
   plan som inte är utcheckad.
 - **Samma yta med flera innehåll.** En ritad yta får ett innehåll när den tilldelas. Ska samma område ha flera
   innehåll (till exempel markanvändning och ett riksintresse) ritar du ytan en gång till, eller kopierar den.

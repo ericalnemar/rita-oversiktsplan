@@ -67,7 +67,7 @@ class StyleTableTests(unittest.TestCase):
         self.assertEqual(len(edges), len(set(edges)))
         dashes = [g.dash for g in styles.GROUPS.values()]
         repeated = {d for d in dashes if dashes.count(d) > 1}
-        self.assertEqual(repeated, {"2;1"}, "bara markanvändningen och klimatriskerna delar strecklängd")
+        self.assertEqual(repeated, {""}, "bara markanvändningen och riksintressena (kommunens) har heldragen kant")
 
     def test_every_group_with_points_has_its_own_point_symbol(self):
         with_points = [c.key for c in model.CATEGORIES if not c.polygon_only]
