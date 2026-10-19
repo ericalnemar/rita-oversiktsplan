@@ -208,6 +208,13 @@ def _configure_fields(layer: QgsVectorLayer, layer_def: model.LayerDef, lookups:
         if field.name == "objektidentitet" and owns_identity:  # i dokumentavsnitt är det en hänvisning, inte unik
             layer.setFieldConstraint(idx, unique, hard)
         layer.setEditorWidgetSetup(idx, _widget_setup(field, lookups))
+        if field.name == "objektidentitet" and owns_identity:
+            # objektets UUID syns i formuläret och attributtabellen men går inte att ändra: pluginet sätter det, och
+            # exporten, kopplingarna och planhandlingens bokmärken hänvisar till det
+            layer.setEditorWidgetSetup(idx, QgsEditorWidgetSetup("TextEdit", {}))
+            form = layer.editFormConfig()
+            form.setReadOnly(idx, True)
+            layer.setEditFormConfig(form)
 
 
 def _default_expression(layer_def: model.LayerDef, field: model.FieldDef, plan_layer: QgsVectorLayer) -> str | None:

@@ -138,13 +138,14 @@ def create_without_geometry(group, assignment: Assignment) -> str:
 
 
 def new_content_values(group) -> dict[str, object]:
-    """Värdena nytt innehåll får från början: standardvärdena under Planens uppgifter och planens planhändelse."""
+    """Värdena nytt innehåll får från början: standardvärdena under Planens uppgifter, och planens planhändelse och
+    datum påbörjat (innehållets datum påbörjat skiljer sig bara i en ändring av planen, och ändras då per objekt)."""
     defaults = plan_storage(group).read_defaults()
     plan = plan_feature(group)
     return {
         "vertikal_avgransning": defaults["vertikal_avgransning"] or None,
         "under_ersattning": defaults["under_ersattning"] == "1",
-        "datum_paborjat": _date(defaults["datum_paborjat"]),
+        "datum_paborjat": plain(plan["datum_paborjat"]) if plan is not None else None,
         "presentationsskala": int(defaults["presentationsskala"]) if defaults["presentationsskala"] else None,
         "illustrativa_granser": True,
         "planhandelse_varde": plain(plan["planhandelse_varde"]) if plan is not None else None,

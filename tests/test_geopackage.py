@@ -175,7 +175,7 @@ class LoadPlanTests(PlanFileCase):
         uuid = layer.defaultValueDefinition(fields.indexOf("objektidentitet")).expression()
         self.assertIn("uuid", uuid)
         self.assertEqual(layer.defaultValueDefinition(fields.indexOf("illustrativa_granser")).expression(), "true")
-        self.assertEqual(layer.editorWidgetSetup(fields.indexOf("objektidentitet")).type(), "Hidden")
+        self.assertEqual(layer.editorWidgetSetup(fields.indexOf("objektidentitet")).type(), "TextEdit")  # synlig, skrivskyddad
 
     def test_new_content_takes_the_plans_current_plan_event(self):
         layer = self.layers["innehall_op_lis_polygon"]

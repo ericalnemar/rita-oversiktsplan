@@ -75,8 +75,8 @@ lägger till planen i ett befintligt projekt) rörs det inte; spara det som vanl
 
 Klicka **Planens uppgifter**. Dialogen har fem flikar:
 
-- **Planen**: titel, datum då planen påbörjades, och om planen tagits fram digitalt eller är en äldre plan som
-  digitaliseras (då med en beskrivning av hur).
+- **Planen**: kommun, titel och datum då planen påbörjades. Nytt innehåll får samma datum påbörjat. (Planen
+  räknas som framtagen digitalt; äldre översiktsplaner digitaliseras inte i pluginet.)
 - **Planhändelse**: det senaste som hänt planen, till exempel *Samrådsunderlag färdigställt* eller *Antagen*, och
   datumet. Nytt innehåll får planens planhändelse. Med **Ge allt innehåll i planen samma planhändelse** (ikryssad
   från början) får även det innehåll som redan finns den nya planhändelsen.
@@ -88,8 +88,9 @@ Klicka **Planens uppgifter**. Dialogen har fem flikar:
   datum. *Lägg till fil…* fyller i namn och sökväg. Lantmäteriets format kräver minst ett underlag. Dokument med samma
   underlagstyp samlas under samma underlag i exporten, och bara webbadresser följer med som länkar. Underlagen sparas i
   tabellerna *Underlag*, *Underlagets dokument* och *Dokumentreferenser*.
-- **Standardvärden för innehåll**: vertikal avgränsning, om innehållet är under ersättning, datum påbörjat och
-  presentationsskala. Värdena sätts på varje objekt som tilldelas innehåll från och med nu.
+- **Standardvärden för innehåll**: vertikal avgränsning, om innehållet är under ersättning och presentationsskala.
+  Datum påbörjat kommer från fliken *Planen*; ett enskilt objekt kan få ett annat datum i attributformuläret, till
+  exempel nytt innehåll i en ändring av planen. Värdena sätts på varje objekt som tilldelas innehåll från och med nu.
 
 Klicka **Spara**. Uppgifterna sparas direkt. Fyll gärna i planhändelsen innan du börjar tilldela innehåll.
 

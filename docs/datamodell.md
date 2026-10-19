@@ -22,6 +22,13 @@ version **2.2**. Modellen finns i koden i `rita_oversiktsplan/core/model.py`.
 | `rita_oversiktsplan_meta` | Pluginets egen tabell: schemaversion (4 sedan 0.1.3: + `precisering` i plangeometrin), databasmodell, katalogversion, koordinatsystem och standardvärdena för nytt innehåll (nycklar som börjar på `standard_`) |
 | `rita_otilldelad_yta`, `rita_otilldelad_linje`, `rita_otilldelad_punkt` | Pluginets egna tabeller: geometri som ritats men ännu inte fått innehåll. Ett objekt flyttas till rätt innehållslager när det tilldelas innehåll. Följer inte med i en leverans |
 
+**Två slags UUID.** Varje objekt (planen, varje innehåll, beslutet) har en egen `objektidentitet`: ett UUID som
+pluginet sätter när objektet skapas eller tilldelas, unikt för just det objektet. Det syns i formuläret och
+attributtabellen men går inte att ändra, eftersom exporten, kopplingarna och planhandlingens bokmärken hänvisar till det.
+ÖP-katalogens UUID är något annat: `vardereferens` (och `gruppreferens`) i uppslagstabellerna, som identifierar ett
+*värde* i katalogen, till exempel *Bostadsförsörjning*. Det är samma för alla objekt med det värdet, och följer med i
+exporten som `innehallstyp.vardereferens`.
+
 **I en PostGIS-databas** (se [Användarhandledning](anvandning.md)) har schemat samma tabeller, med en kolumn `plan`
 (planens id) i varje tabell, även uppslagstabellerna och metadatatabellen, så att flera planer kan dela schemat och
 ändå ha var sin katalogversion. `fid` är en `serial`-kolumn och geometrin heter `geom` (SRID 3006). PostgreSQL tillåter högst 63 tecken i ett tabellnamn, så tabellerna för *Särskilt värdefull kulturmiljö* heter `innehall_op_sarskiltvardefullkulturmiljo_…` i databasen (i GeoPackage behålls Boverkets längre namn). Tabellen

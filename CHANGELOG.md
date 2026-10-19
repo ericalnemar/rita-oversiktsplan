@@ -4,6 +4,15 @@ Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/), versi
 
 ## Ej utgivet
 
+## [0.1.4] – objektidentiteten syns, enklare Planens uppgifter
+
+- **Objektets UUID (objektidentitet) syns** i formuläret och attributtabellen, skrivskyddat. Förut var fältet dolt,
+  fast värdet fanns. Skillnaden mot ÖP-katalogens UUID (värdets `vardereferens`) står i [Datamodell](docs/datamodell.md).
+- **Planens uppgifter:** raderna ligger tätt överst på varje flik (förut kunde en rad bli onödigt hög). Fliken
+  *Planen* har inte längre digitalt ursprung och digitaliseringsbeskrivning: en översiktsplan i pluginet tas fram
+  digitalt, och planens värden behålls. *Standardvärden för innehåll* har inte längre något eget datum påbörjat:
+  nytt innehåll får planens datum från fliken *Planen*.
+
 ## [0.1.3] – kartan: utvecklingsinriktning, pilar, namn och skalor
 
 Efter en genomgång av fjorton kommuners digitala översiktsplaner (se [Symbologi](docs/symbologi.md)).

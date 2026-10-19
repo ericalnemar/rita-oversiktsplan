@@ -98,6 +98,34 @@ class PenTests(ToolCase):
         self.assertIn("Ingen redigering", self.iface.bar.pushMessage.call_args[0][1])
 
 
+class IdentityTests(ToolCase):
+    def test_assigned_content_has_a_visible_read_only_uuid(self):
+        housing = next(c for c in model.CATEGORIES if c.key == "bostadsforsorjning")
+        candidate = self.assigned(category=housing, values={"innehallstyp_varde": "Bostadsförsörjning"})
+        layer = candidate.layer
+        identity = str(layer.getFeature(candidate.fid)["objektidentitet"])
+        self.assertRegex(identity, r"^\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?$")
+        idx = layer.fields().indexOf("objektidentitet")
+        self.assertEqual(layer.editorWidgetSetup(idx).type(), "TextEdit")  # syns i formulär och attributtabell
+        self.assertTrue(layer.editFormConfig().readOnly(idx))
+
+
+class PlanDateTests(ToolCase):
+    def test_new_content_gets_the_plans_start_date(self):
+        candidate = self.assigned()
+        value = candidate.layer.getFeature(candidate.fid)["datum_paborjat"]
+        self.assertEqual(value.toPyDate() if hasattr(value, "toPyDate") else value, datetime.date(2027, 1, 1))
+
+    def test_the_plan_tab_has_no_digitisation_and_the_defaults_no_second_start_date(self):
+        from rita_oversiktsplan.gui.plan_info_dialog import PlanInfoDialog
+        dialog = PlanInfoDialog(content.read_plan_info(self.group), ["Samrådsunderlag färdigställt"])
+        self.addCleanup(dialog.deleteLater)
+        for name in ("digital", "beskrivning", "innehall_paborjat"):
+            self.assertFalse(hasattr(dialog, name), name)
+        info = dialog.plan_info()
+        self.assertTrue(info.digitalt_ursprung)  # planens värde behålls
+
+
 class GreyedTests(ToolCase):
     def test_tools_that_need_an_editing_session_are_grey_until_the_pen_is_used(self):
         toolbar = self.plugin.toolbar

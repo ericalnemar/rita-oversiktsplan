@@ -11,7 +11,7 @@ from typing import Optional
 
 from qgis.PyQt.QtCore import QDate, Qt
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox,
-                                 QFileDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPlainTextEdit,
+                                 QFileDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
                                  QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
                                  QWidget)
 
@@ -46,6 +46,15 @@ class OptionalDate(QWidget):
             return None
         d = self.edit.date()
         return datetime.date(d.year(), d.month(), d.day())
+
+
+def _form(page: QWidget) -> QFormLayout:
+    """Ett formulär överst på fliken: raderna har sin naturliga höjd och det lediga utrymmet hamnar under dem."""
+    outer = QVBoxLayout(page)
+    form = QFormLayout()
+    outer.addLayout(form)
+    outer.addStretch(1)
+    return form
 
 
 class PlanInfoDialog(QDialog):
@@ -83,22 +92,13 @@ class PlanInfoDialog(QDialog):
         self.paborjad.setDisplayFormat("yyyy-MM-dd")
         d = info.datum_paborjat or datetime.date.today()
         self.paborjad.setDate(QDate(d.year, d.month, d.day))
-        self.digital = QCheckBox("Planen har tagits fram digitalt")
-        self.digital.setToolTip("Avmarkera om planen är en befintlig, analog plan som digitaliseras "
-                                "(digitaltUrsprung i Lantmäteriets specifikation).")
-        self.digital.setChecked(info.digitalt_ursprung)
-        self.beskrivning = QPlainTextEdit(info.digitaliseringsbeskrivning)
-        self.beskrivning.setPlaceholderText("Hur den analoga planen har digitaliserats")
-        self.beskrivning.setFixedHeight(4 * self.beskrivning.fontMetrics().lineSpacing() + 14)
-        self.beskrivning.setEnabled(not info.digitalt_ursprung)
-        self.digital.toggled.connect(lambda on: self.beskrivning.setEnabled(not on))
+        # Digitalt ursprung och digitaliseringsbeskrivning visas inte: en översiktsplan som görs i pluginet tas fram
+        # digitalt (äldre planer digitaliseras inte). Planens värden behålls oförändrade och följer med i exporten.
         page = QWidget()
-        form = QFormLayout(page)
+        form = _form(page)
         form.addRow("Kommun", self.kommun)
         form.addRow("Planens titel", self.titel)
         form.addRow("Påbörjad", self.paborjad)
-        form.addRow("", self.digital)
-        form.addRow("Digitalisering", self.beskrivning)
         return page
 
     def _event_tab(self, info: PlanInfo, planhandelser: list[str]) -> QWidget:
@@ -118,7 +118,7 @@ class PlanInfoDialog(QDialog):
         note.setWordWrap(True)
         note.setEnabled(False)
         page = QWidget()
-        form = QFormLayout(page)
+        form = _form(page)
         form.addRow("Planhändelse", self.planhandelse)
         form.addRow("", self.handelse_datum)
         form.addRow("", self.update_content)
@@ -140,7 +140,7 @@ class PlanInfoDialog(QDialog):
         note.setWordWrap(True)
         note.setEnabled(False)
         page = QWidget()
-        form = QFormLayout(page)
+        form = _form(page)
         form.addRow("Diarienummer", self.diarienummer)
         form.addRow("Beslutande", self.instans)
         form.addRow("Antagen", self.fattat)
@@ -158,8 +158,6 @@ class PlanInfoDialog(QDialog):
         self.avgransning.setCurrentIndex(max(self.avgransning.findData(defaults["vertikal_avgransning"]), 0))
         self.under_ersattning = QCheckBox("Innehållet är under ersättning")
         self.under_ersattning.setChecked(defaults["under_ersattning"] == "1")
-        date = datetime.date.fromisoformat(defaults["datum_paborjat"]) if defaults["datum_paborjat"] else None
-        self.innehall_paborjat = OptionalDate("Datum", date)
         self.skala = QSpinBox()
         self.skala.setRange(0, 10_000_000)
         self.skala.setSingleStep(5000)
@@ -167,14 +165,14 @@ class PlanInfoDialog(QDialog):
         self.skala.setSpecialValueText("Ingen")
         self.skala.setValue(int(defaults["presentationsskala"] or 0))
         note = QLabel("Värdena sätts på varje objekt som tilldelas innehåll från och med nu. Ett enskilt objekt kan "
-                      "ändras i attributformuläret. Illustrativa gränser är alltid ja, som specifikationen kräver.")
+                      "ändras i attributformuläret. Datum påbörjat får planens datum (fliken Planen), och "
+                      "illustrativa gränser är alltid ja, som specifikationen kräver.")
         note.setWordWrap(True)
         note.setEnabled(False)
         page = QWidget()
-        form = QFormLayout(page)
+        form = _form(page)
         form.addRow("Vertikal avgränsning", self.avgransning)
         form.addRow("", self.under_ersattning)
-        form.addRow("Påbörjad", self.innehall_paborjat)
         form.addRow("Presentationsskala", self.skala)
         form.addRow(note)
         return page
@@ -273,16 +271,15 @@ class PlanInfoDialog(QDialog):
     # -- resultat -----------------------------------------------------------------------
     def plan_info(self) -> PlanInfo:
         d = self.paborjad.date()
-        start = self.innehall_paborjat.value()
         return PlanInfo(
             kommunnamn=self.info.kommunnamn, kommunkod=self.info.kommunkod, titel=self.titel.text().strip(),
             datum_paborjat=datetime.date(d.year(), d.month(), d.day()),
-            digitalt_ursprung=self.digital.isChecked(),
-            digitaliseringsbeskrivning="" if self.digital.isChecked() else self.beskrivning.toPlainText().strip(),
+            digitalt_ursprung=self.info.digitalt_ursprung,
+            digitaliseringsbeskrivning=self.info.digitaliseringsbeskrivning,
             planhandelse=self.planhandelse.currentData(), planhandelse_datum=self.handelse_datum.value(),
             defaults={"vertikal_avgransning": self.avgransning.currentData(),
                       "under_ersattning": "1" if self.under_ersattning.isChecked() else "0",
-                      "datum_paborjat": start.isoformat() if start else "",
+                      "datum_paborjat": self.info.defaults.get("datum_paborjat", ""),  # används inte längre
                       "presentationsskala": str(self.skala.value()) if self.skala.value() else ""},
             beslut=Decision(diarienummer=self.diarienummer.text().strip(), fattat=self.fattat.value(),
                             overklagat=self.overklagat.value(), laga_kraft=self.laga_kraft.value()),
