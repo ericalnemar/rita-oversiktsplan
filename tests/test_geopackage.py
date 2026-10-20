@@ -212,9 +212,12 @@ class LoadPlanTests(PlanFileCase):
     def test_lines_and_points_are_classified_the_same_way(self):
         for table in ("innehall_op_markochvattenanvandning_line", "innehall_op_klimatrelateradrisk_point"):
             renderer = self.layers[table].renderer()
-            self.assertIsInstance(renderer, QgsCategorizedSymbolRenderer, table)
-        values = [c.value() for c in self.layers["innehall_op_klimatrelateradrisk_point"].renderer().categories()]
-        self.assertIn("Risk för översvämning", values)
+            root = renderer.rootRule()
+            labels = [rule.label() for rule in root.children()]
+            self.assertEqual(labels[-1], "Innehållstyp ej vald", table)
+        renderer = self.layers["innehall_op_klimatrelateradrisk_point"].renderer()
+        root = renderer.rootRule()
+        self.assertIn("Risk för översvämning", [rule.label() for rule in root.children()])
 
     def test_development_direction_is_classified_on_the_complementary_value(self):
         renderer = self.layers["innehall_op_utvecklingsinriktning_polygon"].renderer()
@@ -243,6 +246,12 @@ class LoadPlanTests(PlanFileCase):
                 categories = renderer.categories()
                 symbols = [(c.value(), c.symbol()) for c in categories]
                 most = 2
+            elif table.endswith(("_line", "_point")) and table.startswith("innehall_op_") and \
+                    "utvecklingsinriktning" not in table:  # linjer och punkter i skalsteg
+                root = renderer.rootRule()
+                symbols = [(f"{rule.label()} {step.label()}", step.symbol()) for rule in root.children()
+                           for step in rule.children()]
+                most = 1
             elif table.endswith("_polygon") and not any(key in table for key in styles.NO_BAND):
                 # bården i skalsteg: fyllning, bård och kant
                 root = renderer.rootRule()

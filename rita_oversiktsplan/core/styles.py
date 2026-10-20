@@ -71,7 +71,15 @@ BAND_WIDTH = BAND_STEPS[0][2]
 # och planens och områdens avgränsning (bara en gräns).
 NO_BAND = ("markochvattenanvandning", "utvecklingsinriktning", "plangeometri", "omrade")
 LAND_USE_ALPHA = 204  # markanvändningens täckning (80 %), så att bakgrundskartan anas
-DETAIL_SCALE = 25_000  # punkter och linjer utom utvecklingsinriktningen syns först från 1:25 000
+# Linjer och punkter syns i alla skalor men blir mindre i steg när man zoomar ut, som bårdens skalsteg:
+# (mest inzoomad skala, mest utzoomad skala, andel av full storlek). Minsta mått så att de ändå syns.
+SIZE_STEPS: tuple[tuple[int, int, float], ...] = (
+    (0, 50_000, 1.0),  # inzoomad
+    (50_000, 150_000, 0.7),  # kommunkartan
+    (150_000, 0, 0.45),  # länet och regionen
+)
+MIN_LINE_WIDTH = 0.25  # mm
+MIN_MARKER_SIZE = 1.6  # mm
 LABEL_SCALE = 100_000  # namnen syns från 1:100 000 (utvecklingsinriktningens namn alltid)
 UNASSIGNED_COLOR: RGB = (230, 81, 0)
 MIN_DELTA_E_LAND_USE = 8.5

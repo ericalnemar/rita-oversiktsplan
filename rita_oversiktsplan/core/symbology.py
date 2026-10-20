@@ -101,6 +101,9 @@ def _apply_categorized(layer: QgsVectorLayer, category: model.Category, lookups:
     if group.band and geometry == QgsWkbTypes.GeometryType.PolygonGeometry:
         _apply_band_steps(layer, field, group, category.key, values)
         return
+    if geometry != QgsWkbTypes.GeometryType.PolygonGeometry:
+        _apply_size_steps(layer, field, group, category.key, values)
+        return
     categories = []
     for value in values:
         style = styles.style_for(category.key, value) or FALLBACK
@@ -111,6 +114,23 @@ def _apply_categorized(layer: QgsVectorLayer, category: model.Category, lookups:
     # förstår.
     categories.append(QgsRendererCategory(None, empty, UNASSIGNED_LABEL))
     layer.setRenderer(QgsCategorizedSymbolRenderer(field, categories))
+
+
+def _apply_size_steps(layer: QgsVectorLayer, field: str, group: Group, key: str, values: list[str]) -> None:
+    """Linjer och punkter: en regel per värde, med en underregel per skalsteg (``styles.SIZE_STEPS``) där linjen blir
+    smalare och punkten mindre ju längre man zoomar ut, så att de syns i alla skalor utan att ta över kartan."""
+    geometry = layer.geometryType()
+    root = QgsRuleBasedRenderer.Rule(None)
+    for value in [*values, None]:
+        style = (styles.style_for(key, value) or FALLBACK) if value else Style(styles.UNASSIGNED_COLOR)
+        rule = QgsRuleBasedRenderer.Rule(None, 0, 0, _equals(field, value), value or UNASSIGNED_LABEL)
+        for inner, outer, factor in styles.SIZE_STEPS:
+            # Rule(symbol, mest inzoomade skala, mest utzoomade skala, …)
+            sized = _line(style, group, factor) if geometry == QgsWkbTypes.GeometryType.LineGeometry else \
+                _marker(style, group, factor)
+            rule.appendChild(QgsRuleBasedRenderer.Rule(sized, inner, outer, "", f"{round(factor * 100)} %"))
+        root.appendChild(rule)
+    layer.setRenderer(QgsRuleBasedRenderer(root))
 
 
 def _apply_band_steps(layer: QgsVectorLayer, field: str, group: Group, key: str, values: list[str]) -> None:
@@ -288,13 +308,8 @@ def apply_labels(layer: QgsVectorLayer, category: model.Category, stages=()) -> 
 
 
 def apply_scale(layer: QgsVectorLayer, category: model.Category) -> None:
-    """Punkter och linjer är detaljer och syns först från 1:25 000, så att kommunkartan inte blir grötig.
-    Utvecklingsinriktningen är gjord för kommunkartan och syns i alla skalor, liksom alla ytor."""
-    detail = layer.geometryType() != QgsWkbTypes.GeometryType.PolygonGeometry and category.key != DEVELOPMENT
-    layer.setScaleBasedVisibility(detail)
-    if detail:
-        layer.setMinimumScale(styles.DETAIL_SCALE)  # den mest utzoomade skalan där lagret syns
-        layer.setMaximumScale(0)
+    """Allt syns i alla skalor; linjer och punkter blir i stället mindre i steg när man zoomar ut (``SIZE_STEPS``)."""
+    layer.setScaleBasedVisibility(False)
 
 
 # -- att tilldela -----------------------------------------------------------------------------------------------------
@@ -351,13 +366,17 @@ def band_symbol(style: Style, group: Group, band: float, edge: float) -> QgsFill
     return QgsFillSymbol([fill, inner, _stroke(style.color, group, width=edge)])
 
 
-def _line(style: Style, group: Group) -> QgsLineSymbol:
+def _line(style: Style, group: Group, factor: float = 1.0) -> QgsLineSymbol:
+    """``factor`` krymper linjen för utzoomad karta (se ``styles.SIZE_STEPS``)."""
     if style.filled:  # markanvändning: kraftig linje i en mörkare ton (färgerna är ljusa) med gruppens strecktyp
-        return QgsLineSymbol([_stroke(style.line or styles.darker(style.color, 0.65), group, width=1.2)])
-    return QgsLineSymbol([_stroke(style.color, group, width=max(group.width, 0.6))])
+        width = max(1.2 * factor, styles.MIN_LINE_WIDTH)
+        return QgsLineSymbol([_stroke(style.line or styles.darker(style.color, 0.65), group, width=width)])
+    return QgsLineSymbol([_stroke(style.color, group, width=max(max(group.width, 0.6) * factor,
+                                                                    styles.MIN_LINE_WIDTH))])
 
 
-def _marker(style: Style, group: Group) -> QgsMarkerSymbol:
+def _marker(style: Style, group: Group, factor: float = 1.0) -> QgsMarkerSymbol:
+    """``factor`` krymper punkten för utzoomad karta (se ``styles.SIZE_STEPS``)."""
     if group.hollow:
         fill, outline, outline_width = "0,0,0,0", _rgb(style.color), "0.6"
     elif group.ring:
@@ -368,4 +387,6 @@ def _marker(style: Style, group: Group) -> QgsMarkerSymbol:
         outline, outline_width = _rgb(style.color), "0.8"
     return QgsMarkerSymbol.createSimple({
         "name": group.shape, "angle": str(group.angle), "color": fill, "outline_color": outline,
-        "outline_width": outline_width, "size": "3.8" if group.shape in ("star", "cross") else "3.2"})
+        "outline_width": outline_width,
+        "size": str(round(max((3.8 if group.shape in ("star", "cross") else 3.2) * factor, styles.MIN_MARKER_SIZE),
+                          2))})

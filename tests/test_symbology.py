@@ -230,14 +230,23 @@ class MapTests(PlanCase):
         self.assertEqual(self.layers[MVA].labeling().settings().minimumScale, styles.LABEL_SCALE)
         self.assertFalse(self.layers[UI + "point"].labeling().settings().scaleVisibility)  # schemat: alltid
 
-    def test_points_and_lines_are_details_except_the_development_scheme(self):
-        risk = self.layers["innehall_op_klimatrelateradrisk_point"]
-        self.assertTrue(risk.hasScaleBasedVisibility())
-        self.assertEqual(risk.minimumScale(), styles.DETAIL_SCALE)
-        self.assertTrue(self.layers["innehall_op_klimatrelateradrisk_line"].hasScaleBasedVisibility())
-        self.assertFalse(self.layers[MVA].hasScaleBasedVisibility())
-        self.assertFalse(self.layers[UI + "line"].hasScaleBasedVisibility())
-        self.assertFalse(self.layers[UI + "point"].hasScaleBasedVisibility())
+    def test_everything_is_visible_at_every_scale(self):
+        for table in ("innehall_op_klimatrelateradrisk_point", "innehall_op_klimatrelateradrisk_line", MVA,
+                      UI + "line", UI + "point"):
+            self.assertFalse(self.layers[table].hasScaleBasedVisibility(), table)
+
+    def test_points_and_lines_get_smaller_in_steps_further_out(self):
+        for table, size in (("innehall_op_klimatrelateradrisk_point", lambda s: s.size()),
+                            ("innehall_op_klimatrelateradrisk_line", lambda s: s.symbolLayer(0).width()),
+                            ("innehall_op_markochvattenanvandning_line", lambda s: s.symbolLayer(0).width())):
+            renderer = self.layers[table].renderer()
+            root = renderer.rootRule()
+            steps = root.children()[0].children()
+            self.assertEqual([(s.maximumScale(), s.minimumScale()) for s in steps],
+                             [(inner, outer) for inner, outer, _ in styles.SIZE_STEPS], table)
+            sizes = [size(s.symbol()) for s in steps]
+            self.assertEqual(sizes, sorted(sizes, reverse=True), table)
+            self.assertGreaterEqual(min(sizes), min(styles.MIN_LINE_WIDTH, styles.MIN_MARKER_SIZE), table)
 
     def test_labels_and_scales_reach_the_sld(self):
         text = self.layers[MVA].exportSldStyleV3(QgsSldExportContext()).toString()

@@ -42,7 +42,7 @@ Hudiksvall, Bromölla, Danderyd, Kävlinge, Kalix, Mullsjö, Uppsala, Vadstena o
 - utvecklingsinriktningen som ett **kraftigt schema för hela kommunen**: en färg per tema, breda halvgenomskinliga band,
   noder som ringar, storleken efter nivå och **pilspetsar** där stråken fortsätter;
 - **namn i kartan**, som områdesbeteckningar i en tryckt översiktsplan;
-- **detaljer först när man zoomat in** (punkter och linjer från 1:25 000);
+- **mindre detaljer när man zoomar ut** (punkter och linjer syns i alla skalor men blir mindre i steg);
 - markanvändningen **täcker till 80 procent**, så att bakgrundskartan anas.
 
 Flera kommuner visar också *förändring* med samma färg i olika styrka (befintligt ljust, nytt mörkare eller
@@ -175,9 +175,16 @@ Utvecklingsinriktningen är gjord för att läsas i hela kommunen, i skala 1:100
 Innehållets **namn** visas i kartan med mörk text och vit kant. Utvecklingsinriktningens namn syns alltid, övrigas
 från 1:100 000. Fyll i namnet i *Tilldela innehåll*, till exempel en områdesbeteckning som "B4".
 
-**Punkter och linjer** (utom utvecklingsinriktningen) är detaljer och syns först från **1:25 000**, så att
-kommunkartan inte blir grötig. Zooma in för att se och redigera dem. Ytor syns i alla skalor. Gränserna kan ändras
-under lagrets egenskaper → Visning (*Skalberoende synlighet*).
+**Allt syns i alla skalor.** Punkter och linjer (utom utvecklingsinriktningen, som har sitt eget schema) blir i
+stället mindre i tre steg när man zoomar ut, som bården på ytorna, så att de inte tar över kartan:
+
+| Skala | Linjer och punkter |
+|---|---|
+| inzoomad, till 1:50 000 | full storlek |
+| kommunkartan, 1:50 000–1:150 000 | 70 % |
+| län och region, utzoomad förbi 1:150 000 | 45 % (men linjer minst 0,25 mm och punkter minst 1,6 mm) |
+
+Stegen är skalregler, så att de följer med till GeoServer.
 
 ## Övrigt innehåll (överlägg)
 

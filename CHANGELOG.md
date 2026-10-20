@@ -4,6 +4,12 @@ Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/), versi
 
 ## Ej utgivet
 
+## [0.1.6] – linjer och punkter i alla skalor
+
+- **Linjer och punkter syns i alla skalor.** Förut syntes de först från 1:25 000. Nu blir de i stället mindre i tre
+  steg när man zoomar ut (full storlek till 1:50 000, 70 % till 1:150 000, sedan 45 %, med ett minsta mått), som
+  bården på ytorna, så att de inte tar över kartan. Utvecklingsinriktningen har kvar sitt eget schema.
+
 ## [0.1.5] – Lantmäteriets regler, riksintressen, utbyggnadsordning och Topografi 10
 
 - **Exporten kontrollerar Lantmäteriets regler.** Utöver det som formatet kräver kontrolleras nu reglerna i
@@ -41,16 +47,16 @@ Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/), versi
   in dem som kommunens ställningstagande*, som gör samma sak för allt som hämtas.
 - **Nytt: Markanvändning från Topografi 10…** i menyn. Gör om Lantmäteriets Topografi 10 (zip-filen med en GeoPackage per tema, som man laddar ner själv från Geotorget) eller Marktäcke till befintlig mark- och vattenanvändning: markslag och anläggningsområden blir ytor, större vägar, järnvägar, vattendrag och ledningar linjer, och vindkraftverk, stationer m.m. punkter. Omklassningen visas i en tabell som går att ändra (valet sparas). Ytor och linjer med samma värde slås ihop och klipps mot planens avgränsning; allt tas med oavsett storlek. En ny körning ersätter det som skapades förra gången; ritade objekt rörs inte.
 - **Mark- och vattenanvändningen har Topografi 10:s färger** där det finns ett motsvarande markslag (bostäder, funktionsblandat, verksamheter, jordbruk, skogsbruk, natur- och kulturlandskap, vatten; grönområde i en ton nära idrottsplanernas), enligt Lantmäteriets stilfil. Etapperna i utbyggnadsordningen utgår från samma färger; grått blir mörkare grått i stället för en annan färg.
-- **Förslaget i Markanvändning från Topografi 10** (efter användarens prov): öppen mark, åker, barr- och blandskog
+- **Förslaget i Markanvändning från Topografi 10**: öppen mark, åker, barr- och blandskog
   och lövskog blir *Landsbygd*; byggnader och punkter föreslås inte (de går att välja i tabellen).
 - **Vägar som linje ritas i en ljusare grå.**
 - **Knapp i verktygsfältet för Markanvändning från Topografi 10**, efter Hämta riksintressen.
-- **Befintlig mark- och vattenanvändning har ingen kantlinje**, bara färgen (användarens önskan).
-- **Nytt: Utbyggnadsordning** (användarens önskan). En ny flik i Planens uppgifter där planens etapper läggs in
+- **Befintlig mark- och vattenanvändning har ingen kantlinje**, bara färgen.
+- **Nytt: Utbyggnadsordning**. En ny flik i Planens uppgifter där planens etapper läggs in
   med namn och tidsperiod, i ordning. Etapperna går att välja för mark- och vattenanvändning och utvecklingsinriktning
   i Tilldela innehåll och i formuläret. I kartan ritas mark- och vattenanvändning i en etapp med kraftig streckad kant
   och en färg från mättad (första etappen) till ljus (sista), och etappen står under namnet.
-- **Alla överlägg ritas med bård** (användarens önskan): ytorna för miljökvalitetsnormer, klimatrisker,
+- **Alla överlägg ritas med bård**: ytorna för miljökvalitetsnormer, klimatrisker,
   bostadsförsörjning och de andra överläggen har nu, som kommunens ställningstagande till riksintressena, en bred bård
   på insidan av kanten, en mycket svag fyllning och namnet längs kanten. Gruppens strecktyp är kvar i ytterkanten.
   Riksintressena enligt miljöbalken (underlaget) har samma bård, svaga fyllning, skalsteg och namn, men tunn streckad

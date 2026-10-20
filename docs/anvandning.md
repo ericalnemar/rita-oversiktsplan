@@ -271,7 +271,7 @@ korthet:
   du något annat kryssar du i *Tilldela innehåll*: **Pilspets där linjen slutar** och/eller **där linjen börjar**.
   Inzoomat (från 1:50 000) blir schemat mindre.
 - **Namnet** du ger innehållet i *Tilldela innehåll* visas i kartan. Knappen **Dölj texter** släcker namnen tillfälligt.
-- **Punkter och linjer** (utom utvecklingsinriktningen) syns först från 1:25 000.
+- **Punkter och linjer** syns i alla skalor och blir mindre i steg när du zoomar ut.
 - **Stilfiler för GeoServer:** *Insticksprogram → Rita Översiktsplan → Spara stilar för GeoServer (SLD)…*.
 
 ## Planens lager
