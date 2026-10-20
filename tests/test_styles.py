@@ -80,14 +80,15 @@ class StyleTableTests(unittest.TestCase):
         self.assertNotIn("pattern", styles.Style.__dataclass_fields__)
         self.assertNotIn("shape", styles.Style.__dataclass_fields__)
 
-    def test_land_and_water_use_borrows_the_detailed_plan_colours_where_they_are_distinct(self):
+    def test_land_and_water_use_takes_topografi_10_first_and_the_detailed_plan_colours_otherwise(self):
         for value, style in styles.MARK_OCH_VATTEN.items():
             self.assertTrue(style.filled, value)
-            if style.detaljplan:
+            if value in styles.TOPOGRAFI10:
+                self.assertEqual(style.color, styles.TOPOGRAFI10[value][0], value)
+            elif style.detaljplan:
                 self.assertIn(style.color, styles.FARGER.values(), value)
-        self.assertEqual(styles.MARK_OCH_VATTEN["Bostadsbebyggelse"].color, styles.FARGER["Gul"])
-        self.assertEqual(styles.MARK_OCH_VATTEN["Vatten"].color, styles.FARGER["Blå"])
-        self.assertEqual(styles.MARK_OCH_VATTEN["Verksamheter"].color, styles.FARGER["Beige"])
+        self.assertEqual(styles.MARK_OCH_VATTEN["Verksamheter"].color, (240, 240, 240))  # Topografi 10: industri
+        self.assertEqual(styles.MARK_OCH_VATTEN["Service"].color, styles.FARGER["Röd"])
 
     def test_everything_else_is_an_overlay_without_solid_fill(self):
         for key, table in styles.STYLES.items():

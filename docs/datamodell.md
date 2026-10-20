@@ -98,5 +98,27 @@ exporten till Lantmäteriet.
   rader i `innehall_op_beror_annat_innehall`, en per berört innehåll, med det berördas objektidentitet i
   `beror_annat_innehal_uuid` (mallens stavning).
 - **Riksintressets id** sparas i `objektidentitet_ri` i lagren för riksintressen.
-- **Beslut:** innehållets `beslut` får antagandebeslutets objektidentitet när beslutet sparas, om fältet är tomt.
+- **Beslut (från 0.1.5):** antagandebeslutet (planens `beslut`) påverkar bara planen. Innehållets `beslut` pekar på en
+  ändrings beslut. Äldre planer där innehållet har antagandebeslutets id exporteras utan det (OP-JSON-005).
+
+## Utbyggnadsordning (0.1.5)
+
+Planens etapper står i meta-tabellen under nyckeln `utbyggnadsordning`, som JSON: en lista med `{"namn", "period"}`
+i utbyggnadsordning. Innehållets fält `utbyggnadsordning` (mark- och vattenanvändning, utvecklingsinriktning) får
+etappens text, `namn (period)`. Ingen ny tabell eller kolumn behövs, så schemat är oförändrat.
+
+## Ändring av planen (0.1.5)
+
+En ändring är en rad i `beslut_op` med rubriken *Ändring: namn*. Den pågående ändringen står i meta-tabellen:
+
+| Nyckel | Värde |
+|---|---|
+| `andring_beslut` | ändringsbeslutets objektidentitet |
+| `andring_paborjat` | datum påbörjat (blir innehållets `datum_paborjat`) |
+| `andring_planhandelse`, `andring_planhandelse_datum` | ändringens planhändelse |
+
+Nytt innehåll får dessa värden och `beslut` = ändringsbeslutet. Ett beslut utan datum (fattat, överklagat, laga kraft)
+som inte är planens räknas som pågående och exporteras inte. När ändringen antas tas nycklarna bort.
+
+**Hämtade riksintressen** (0.1.5) har `objektidentitet_ri` = myndighetens id och `hamtatdatum` = dagen för hämtningen.
 

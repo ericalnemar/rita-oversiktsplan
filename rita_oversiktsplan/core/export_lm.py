@@ -12,12 +12,15 @@ Alla objekt har ``geometry: null`` på GeoJSON-nivå, som schemat kräver. Värd
 ``{varde, vardereferens, grupp, gruppreferens}`` ur planens uppslagstabeller (planens katalogversion). Tomma fält
 utelämnas. Koordinater i planens koordinatsystem (SWEREF 99 TM eller en lokal zon), med millimeters precision och ytterringar moturs.
 
-``check`` listar det som saknas för att filen ska följa schemat (fel) och det som är värt att se över (varningar).
-Exporten läser planen, med ändringar som inte sparats, och ändrar ingenting.
+Exporten listar det som saknas för att filen ska följa schemat (fel) och det som är värt att se över (varningar),
+och kontrollerar Lantmäteriets regler för leveransen (:mod:`rules`, med regelns id i texten). Exporten läser planen,
+med ändringar som inte sparats, och ändrar ingenting.
 
 Tolkningar (schemat säger inte mer): dokumentets ``externReferens`` får dokumentets id som ``identitet``, filnamnet
 som ``producentensIdentitet``, datumangivelsen som ``tidsstampel`` och kortnamnet (annars "Planhandling") som
-``avser``; en länk tas bara med om den är en webbadress. Beslutet påverkar planen (``paverkar`` = planens id).
+``avser``; en länk tas bara med om den är en webbadress. Ett beslut påverkar antingen planen eller innehåll, aldrig
+båda (OP-JSON-005): antagandebeslutet (planens ``beslut``) påverkar planen, en ändrings beslut det innehåll som hör till
+ändringen (innehållets ``beslut``).
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ from typing import Any, Optional
 from qgis.core import NULL, QgsGeometry, QgsWkbTypes
 from qgis.PyQt.QtCore import QDate, QDateTime
 
-from . import model, relations
+from . import model, opkatalog, relations, rules
 from .project import draft_layers, layer_in_group, plan_storage
 
 MEDIATYP = "application/vnd.lm.oversiktsplan.v2+json"
@@ -173,6 +176,7 @@ class _Plan:
         self.lookups = {lookup.name: storage.read_lookup_values(lookup) for lookup in model.LOOKUPS}
         self.relations = relations.links(group)  # berör annat innehåll
         self.problems: list[Problem] = []
+        self.where: dict[str, tuple[str, int]] = {}  # objektidentitet → (tabell, fid), för att visa ett fynd
 
     def layer(self, name: str):
         return layer_in_group(self.group, name)
@@ -261,6 +265,8 @@ def _plan_feature(plan: _Plan, sections: dict, documents: dict) -> tuple[Optiona
     table = model.OVERSIKTSPLAN.name
     props: dict[str, Any] = {"feature:typ": "oversiktsplan", **_identity(row)}
     identity = props["objektidentitet"]
+    if identity:
+        plan.where[identity] = (table, row.id())
     _put(props, "beslut", _text(row["beslut"]))
     for key, field, what in (("kommunkod", "kommunkod", "Kommunkoden"), ("kommunnamn", "kommunnamn", "Kommunen")):
         _put(props, key, _text(row[field]))
@@ -308,26 +314,45 @@ def _underlag(plan: _Plan, row, documents: dict) -> list[dict]:
     return result
 
 
-def _decision_features(plan: _Plan, plan_identity: Optional[str], content: list[dict]) -> list[dict]:
+_EVENTS = (("fattat", "datum_fattat"), ("överklagat", "datum_overklagat"), ("laga kraft", "datum_laga_kraft"))
+
+
+def _pending(plan: _Plan, plan_decision: Optional[str]) -> set[str]:
+    """Beslut för ändringar som pågår (utan datum än): de och innehållets hänvisning till dem exporteras inte."""
+    return {str(_text(row["objektidentitet"])) for row in plan.rows(model.BESLUT.name)
+            if _text(row["objektidentitet"]) != plan_decision and not any(_date(row[f]) for _, f in _EVENTS)}
+
+
+def _decision_features(plan: _Plan, plan_identity: Optional[str], plan_decision: Optional[str],
+                       content: list[dict]) -> list[dict]:
+    """Ett beslutOP per beslut. Antagandebeslutet (planens ``beslut``) påverkar planen; övriga beslut (ändringar)
+    påverkar det innehåll vars ``beslut`` pekar på dem. Ett beslut som inte påverkar något tas inte med (en ändring
+    som ännu inte har något innehåll)."""
     result = []
     table = model.BESLUT.name
+    pending = _pending(plan, plan_decision)
     for row in plan.rows(table):
         props: dict[str, Any] = {"feature:typ": "beslutOP", **_identity(row)}
+        if props["objektidentitet"] in pending:
+            continue
+        if props["objektidentitet"]:
+            plan.where[props["objektidentitet"]] = (table, row.id())
         organisation = _text(row["beslutande_organisation"])
         props["beslutandeOrganisation"] = {"organisationsnamn": organisation} if organisation else {}
         _put(props, "beslutandeInstans", _text(row["beslutande_instans"]))
-        events = [{"handelsetyp": kind, "datum": _date(row[field])}
-                  for kind, field in (("fattat", "datum_fattat"), ("överklagat", "datum_overklagat"),
-                                      ("laga kraft", "datum_laga_kraft")) if _date(row[field])]
+        events = [{"handelsetyp": kind, "datum": _date(row[field])} for kind, field in _EVENTS if _date(row[field])]
+        if props["objektidentitet"] and props["objektidentitet"] == plan_decision:
+            affected = [{"identitet": plan_identity, "objekttyp": "oversiktsplan"}] if plan_identity else []
+        else:
+            affected = [{"identitet": c["properties"]["objektidentitet"], "objekttyp": "innehallOP"} for c in content
+                        if c["properties"].get("beslut") == props["objektidentitet"]]
+        if not affected:
+            continue  # en ändring utan innehåll än, eller ett beslut som inte hör till något
+        props["paverkar"] = affected
         if events:
             props["handelse"] = events
         else:
             plan.problem(FEL, "Beslutet saknar datum (när det fattades eller fick laga kraft).", table, row.id())
-        affected = [{"identitet": plan_identity, "objekttyp": "oversiktsplan"}] if plan_identity else []
-        affected += [{"identitet": c["properties"]["objektidentitet"], "objekttyp": "innehallOP"} for c in content
-                     if c["properties"].get("beslut") == props["objektidentitet"]]
-        if affected:
-            props["paverkar"] = affected  # planen och det innehåll beslutet gäller
         _put(props, "rubrik", _text(row["rubrik"]))
         _put(props, "diarienummer", _text(row["diarienummer"]))
         if "diarienummer" not in props:
@@ -337,8 +362,10 @@ def _decision_features(plan: _Plan, plan_identity: Optional[str], content: list[
     return result
 
 
-def _content_features(plan: _Plan, plan_identity: Optional[str], sections: dict) -> list[dict]:
+def _content_features(plan: _Plan, plan_identity: Optional[str], sections: dict,
+                      plan_decision: Optional[str] = None) -> list[dict]:
     result = []
+    pending = _pending(plan, plan_decision)
     for layer_def in model.CONTENT_LAYERS:
         layer = plan.layer(layer_def.name)
         if layer is None:
@@ -350,7 +377,11 @@ def _content_features(plan: _Plan, plan_identity: Optional[str], sections: dict)
             props: dict[str, Any] = {"feature:typ": "innehallOP", **_identity(row)}
             if plan_identity:
                 props["oversiktsplan"] = plan_identity
-            _put(props, "beslut", _text(row["beslut"]))
+            if props["objektidentitet"]:
+                plan.where[props["objektidentitet"]] = (table, fid)
+            decision = _text(row["beslut"])
+            # antagandebeslutet påverkar planen, inte innehållet (OP-JSON-005): bara en ändrings beslut tas med
+            _put(props, "beslut", decision if decision not in (plan_decision, *pending) else None)
             kind = plan.value(category.lookup, row["innehallstyp_varde"], "Innehållstypen", table, fid)
             if _blank(row["innehallstyp_varde"]):
                 plan.problem(FEL, f"{category.alias}: innehållstypen saknas.", table, fid)
@@ -412,14 +443,20 @@ def export(group) -> tuple[dict, list[Problem]]:
     documents = _documents(plan)
     sections = _sections(plan, documents)
     plan_feature, plan_identity = _plan_feature(plan, sections, documents)
-    content = _content_features(plan, plan_identity, sections)
-    features = ([plan_feature] if plan_feature else []) + _decision_features(plan, plan_identity, content) + content
+    plan_decision = (plan_feature or {}).get("properties", {}).get("beslut")
+    content = _content_features(plan, plan_identity, sections, plan_decision)
+    features = ([plan_feature] if plan_feature else []) + \
+        _decision_features(plan, plan_identity, plan_decision, content) + content
     if not any(f["properties"]["feature:typ"] == "innehallOP" for f in features):
         plan.problem(VARNING, "Planen har inget innehåll än.")
     drafts = sum(layer.featureCount() for layer in draft_layers(group).values() if layer is not None)
     if drafts:
         plan.problem(VARNING, f"{drafts} objekt under Att tilldela har inget innehåll och följer inte med.")
-    return {"type": "FeatureCollection", "feature:mediatyp": MEDIATYP, "features": features}, plan.problems
+    collection = {"type": "FeatureCollection", "feature:mediatyp": MEDIATYP, "features": features}
+    for finding in rules.check(collection, opkatalog.bundled()):
+        table, fid = plan.where.get(finding.identity, (None, None)) if finding.identity else (None, None)
+        plan.problem(finding.level, f"[{finding.rule}] {finding.text}", table, fid)
+    return collection, plan.problems
 
 
 def dumps(collection: dict) -> str:

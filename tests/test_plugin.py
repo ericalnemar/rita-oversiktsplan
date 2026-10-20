@@ -92,6 +92,9 @@ class FakeIface:
 
 class PluginTests(unittest.TestCase):
     def setUp(self):
+        network = mock.patch("rita_oversiktsplan.plugin.qgis_get", side_effect=OSError("inget nätverk i testerna"))
+        network.start()
+        self.addCleanup(network.stop)
         self.iface = FakeIface()
         self.plugin = classFactory(self.iface)
         self.plugin.initGui()
@@ -102,6 +105,9 @@ class PluginTests(unittest.TestCase):
     def test_the_menu_offers_the_commands_the_toolbar_toggle_and_the_about_dialog(self):
         texts = [a.text() for a in self.iface.menus[MENU].actions() if not a.isSeparator()]
         self.assertEqual(texts, ["Ny översiktsplan…", "Öppna översiktsplan…", "Importera geometri…", "Planens uppgifter…",
+                                 "Ändring av översiktsplanen…", "Hämta riksintressen…",
+                                 "Skapa kommunens ställningstagande för markerade riksintressen",
+                                 "Markanvändning från Topografi 10…",
                                  "Leverans och export…", "Skapa arkivpaket…", "Kontrollera arkivpaket…",
                                  "Inställningar för leverans till NGP…", "Spara stilar för GeoServer (SLD)…",
                                  "Skapa bokmärken i planhandling…", "Spara alla redigeringar", "Rita Översiktsplan",
@@ -115,6 +121,7 @@ class PluginTests(unittest.TestCase):
                                  "Avsluta redigering",
                                  "Planens uppgifter", "Leverans och export", "Skapa bokmärken i planhandling", "Markera",
                                  "Avmarkera alla", "Dölj texter", "Rita yta", "Rita linje", "Rita punkt", "Importera geometri",
+                                 "Hämta riksintressen", "Markanvändning från Topografi 10",
                                  "Tilldela innehåll", "Kopiera innehåll", "Berör annat innehåll"])
         for action in toolbar.actions():
             if not action.isSeparator():

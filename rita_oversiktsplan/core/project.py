@@ -6,7 +6,7 @@ from pathlib import Path
 from qgis.core import (QgsCoordinateReferenceSystem, QgsDefaultValue, QgsEditFormConfig, QgsEditorWidgetSetup,
                        QgsFieldConstraints, QgsProject, QgsVectorLayer)
 
-from . import model, symbology
+from . import model, symbology, utbyggnad
 from .storage import GeoPackageStorage, PostgisError, PostgisStorage, Storage, as_storage, from_key
 
 PLAN_PROPERTY = "rita_oversiktsplan/plan"  # på planens grupp: GeoPackage-filens sökväg, eller planens plats i databasen
@@ -135,6 +135,7 @@ def load_plan(source, project: QgsProject) -> dict[str, QgsVectorLayer]:
     documents.setExpanded(False)
 
     lookups = {lookup.name: plan_storage_.read_lookup(lookup) for lookup in model.LOOKUPS}
+    stages = utbyggnad.parse(plan_storage_.read_meta().get(utbyggnad.KEY, ""))
     plan_layer = layers[model.OVERSIKTSPLAN.name]
     feature = next(plan_layer.getFeatures(), None)
     title = feature["planens_titel"] if feature is not None else None
@@ -143,7 +144,9 @@ def load_plan(source, project: QgsProject) -> dict[str, QgsVectorLayer]:
     for layer_def in model.LAYERS:
         _configure_fields(layers[layer_def.name], layer_def, lookups, plan_layer)
         if layer_def.category is not None:
-            symbology.apply(layers[layer_def.name], layer_def.category, lookups)
+            symbology.apply(layers[layer_def.name], layer_def.category, lookups, stages)
+            if stages:
+                symbology.set_stage_widget(layers[layer_def.name], stages)
     for layer_def in model.DRAFT_LAYERS.values():
         symbology.apply_draft(layers[layer_def.name])
     if plan_storage_.read_only:

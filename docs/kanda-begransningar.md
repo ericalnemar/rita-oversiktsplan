@@ -5,10 +5,32 @@ under [Issues](https://github.com/ericalnemar/rita-oversiktsplan/issues).
 
 ## Vad som saknas
 
+- **Hämtade ytor och linjer förenklas** (5 m tolerans, hål under 1 000 m² tas bort), så de följer inte myndighetens geometri exakt. Gränserna i en översiktsplan är illustrativa, men använd myndighetens egen tjänst när exakta gränser behövs.
+- **Etiketten med riksintressets slag** är ett uttryck (namn – värde); i GeoServer blir det en funktion i SLD, som inte är provad.
+- **Markanvändning från Topografi 10** är bara provad med låtsade filer med samma skikt och fält som Lantmäteriets (och en med 60 000 ytor för tiden: under 10 sekunder), inte med en riktig nedladdning: den kräver inloggning på Geotorget. Objekttyper och ändamål är tagna ur Lantmäteriets dokumentation av Topografi 10 (2026-10-20); skikten hittas på fältet `objekttyp`. Omklassningen är pluginets förslag, och Topografi 10 visar vad som finns på marken, inte alltid användningen. Sankmark, byggnader, mindre vägar och stigar tas inte med i förslaget. Ytor och linjer förenklas med 5 m.
+- **Topografi 10:s färger:** några av dem är mycket ljusa (öppen mark, industrigrå) och syns svagt mot vit bakgrund, som i Lantmäteriets egen karta. Grönområde har en egen blågrön ton, eftersom Topografi 10 saknar park och idrottsplanernas gröna låg för nära skogen; vägtrafik fick en mörkare grå av samma skäl.
+- **Utbyggnadsordningen** syns bara i mark- och vattenanvändningens ytor (inte linjer, punkter eller
+  utvecklingsinriktning). Med fler än fem–sex etapper blir tonerna svåra att skilja åt. Etappens text i fältet är
+  pluginets format, `namn (period)`; Lantmäteriets format har bara fritext.
+- **Bården på överläggens ytor i GeoServer är inte provad.** Den är en kantlinje med förskjutning (`PerpendicularOffset` i SLD); i QGIS hamnar den alltid innanför kanten, men GeoServer kan förskjuta den utåt beroende på åt vilket håll ytans kant är ritad.
+- **Nya symboler når inte sparade projekt.** Symbolerna sätts när planen läggs till i kartan. Ett projekt som sparats med en äldre version behåller de gamla; öppna planen i ett nytt projekt för att få de nya.
 - **Pilspetsarna i GeoServer är inte provade.** Stilfilerna från *Spara stilar för GeoServer (SLD)…* använder GeoServers funktioner `endPoint`/`endAngle`; vridningen är beräknad, inte provad. Etiketternas placering i GeoServer kan skilja sig från QGIS.
 - **Kartbilden är inte färdig.** Arbete pågår med hur planen visas i kartan: symbologin (färger, kantlinjer och punktsymboler per innehållstyp) och presentationen i övrigt kommer att ändras. Se [Symbologi](symbologi.md).
-- **Kontroll mot specifikationen.** Exporten kontrollerar att det som Lantmäteriets format kräver finns, men inte
-  Lantmäteriets valideringsregler i NGP (de är inte genomgångna än).
+- **Kontroll mot specifikationen.** Exporten kontrollerar Lantmäteriets regler (OP-JSON-… och ÖP-X…) så som pluginet
+  tolkar dem ur objekttypskatalogen och dataproduktspecifikationen (test 4). Den är inte provad mot Lantmäteriets
+  validering i NGP, och den validerar inte mot JSON-schemat (ÖP-X01).
+- **Ändring av översiktsplanen** är pluginets tolkning av hur en ändring ska se ut i Lantmäteriets format: ändringen
+  är ett eget beslut som påverkar innehållet i ändringen, och innehållet har ändringens datum påbörjat och
+  planhändelse. Ett beslut utan datum räknas som en pågående ändring och exporteras inte. Bara en ändring kan pågå åt
+  gången. Planen som helhet behåller sin planhändelse.
+- **Hämta riksintressen** använder Boverkets karttjänst (februari 2026). Lagernumren i tjänsten är inskrivna i
+  pluginet: byter Boverket tjänst eller lager slutar hämtningen fungera tills pluginet uppdateras. Fältet med
+  myndighetens id skiljer sig mellan lagren; där inget id finns (till exempel turism och rörligt friluftsliv)
+  känns objekten igen på värde och geometri vid en ny hämtning. Påverkansområden, buller- och hinderytor hämtas inte.
+  Hämtningen är provad mot Boverkets riktiga tjänst för ett område kring Lidköping, men inte i en riktig QGIS.
+- **Kommunens yta** i Ny översiktsplan hämtas från Lantmäteriets kommunytor via länsstyrelsernas nationella visningstjänst (lager och fält inskrivna i pluginet). Byter länsstyrelserna tjänst slutar det fungera tills pluginet uppdateras; då ritar man plangeometrin själv. Provat mot tjänsten för Lidköping, Munkfors och Stockholm, inte i en riktig QGIS.
+- **Kommunens ställningstagande** kopplas till sitt riksintresse med *berör annat innehåll*. Det är pluginets
+  tolkning: Lantmäteriets specifikation säger inte hur ett ställningstagande ska peka på riksintresset.
 - **Leverans till NGP är inte provad mot Lantmäteriet.** Klienten är kopierad från Rita Detaljplan och testad mot en
   låtsasserver som beter sig som Uppdatering-API:et. Att informationstypen heter `oversiktsplan` och att
   mediatypen `application/vnd.lm.oversiktsplan.v2+json` tas emot är antaganden utifrån Lantmäteriets
@@ -18,8 +40,6 @@ under [Issues](https://github.com/ericalnemar/rita-oversiktsplan/issues).
   tidsstämpel, vad den avser) säger schemat inte, se `core/export_lm.py`. Länkar till dokument tas bara med om de är
   webbadresser. Riksintressets id blir en extern referens med samma värde som identitet och producentens
   identitet, och tidsstämpeln är *hämtat datum* (eller innehållets versionsdatum): det är tolkningar.
-- **Beslut:** pluginet hanterar ett beslut, antagandet. Senare ändringar med egna beslut får man sköta i tabellen
-  `beslut_op` och fältet *beslut* själv.
 - **Arkivpaketet** följer Boverkets mallar, som avviker från PREMIS egen schemafil; paketet är inte validerat mot
   schemat. Planens uppgifter ligger i en `objectCharacteristicsExtension` (Boverket anger inte hur). Datum skrivs som i
   mallarna. Pluginet gör inga filer till PDF/A och kontrollerar dem inte. Paketet sparas som en mapp, inte i ett

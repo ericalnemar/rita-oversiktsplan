@@ -29,6 +29,8 @@ Verktygsfältet **Rita Översiktsplan**, från vänster:
 | Orange streckad linje | **Rita linje** |
 | Orange punkt | **Rita punkt** |
 | Röd låda med pil ned | **Importera geometri**: hämta ytor, linjer och punkter från ett annat lager (se nedan) |
+| Karta med färgade ytor och röd pil | **Markanvändning från Topografi 10**: befintlig mark- och vattenanvändning ur Lantmäteriets Topografi 10 eller Marktäcke (se nedan) |
+| Karta med röd pil ned | **Hämta riksintressen**: riksintressena enligt miljöbalken ur Boverkets karttjänst, och om du vill kommunens ställningstagande till dem (se nedan) |
 | Lapp med muspekare | **Tilldela innehåll**: klicka på det du ritat och välj vad det är |
 | Två lappar med grönt plus | **Kopiera innehåll**: ge andra objekt samma innehåll som ett objekt du klickar på (se nedan) |
 | Två ytor med blå streckad linje | **Berör annat innehåll**: koppla ett innehåll till det innehåll det berör (se nedan) |
@@ -43,7 +45,9 @@ Har du flera planer öppna gäller knapparna den plan som det markerade lagret h
 lagerpanelen.
 
 Samma kommandon finns under **Insticksprogram → Rita Översiktsplan**. Där kan du också visa eller dölja
-verktygsfältet, och öppna **Om Rita Översiktsplan…** med version, licens, en länk till den här handledningen och till webbsidan [ritaplan.xyz](https://ritaplan.xyz).
+verktygsfältet, och öppna **Ändring av översiktsplanen…**, **Hämta riksintressen…**, **Skapa kommunens
+ställningstagande för markerade riksintressen** (se nedan) och
+**Om Rita Översiktsplan…** med version, licens, en länk till den här handledningen och till webbsidan [ritaplan.xyz](https://ritaplan.xyz).
 
 ## Skapa en ny översiktsplan
 
@@ -62,10 +66,16 @@ verktygsfältet, och öppna **Om Rita Översiktsplan…** med version, licens, e
    - **Koordinatsystem**: SWEREF 99 TM (förvalt) eller en av de tolv lokala SWEREF 99-zonerna. Lantmäteriets
      specifikation tillåter alla tretton; Boverkets GIS-databasmodell använder SWEREF 99 TM. Det går inte att
      ändra efteråt, och i en databas delar alla planer i samma schema koordinatsystem.
+   - **Plangeometri: Hämta kommunens hela yta från Lantmäteriet** (ikryssad från början). Kommunens yta blir planens
+     plangeometri direkt. Gäller planen en mindre del av kommunen kryssar du ur rutan och ritar plangeometrin själv.
 3. Klicka **Skapa**.
 
 Pluginet skapar en GeoPackage-fil (en databas i en enda fil) med samma tabeller som Boverkets GIS-databasmodell för
 ÖP-modellen, och lägger till planen överst i lagerpanelen i gruppen **Översiktsplan – *titeln***.
+
+Kommunens yta hämtas från Lantmäteriets kommunytor via länsstyrelsernas nationella visningstjänst, efter
+kommunkoden. Går den inte att hämta (till exempel utan internet) skapas planen ändå, utan plangeometri, och ett
+meddelande säger det.
 
 **Projektfilen sparas direkt** (som i Rita Detaljplan): har du inte sparat QGIS-projektet förut sparas det som
 `filnamn.qgz` i samma mapp, så att du inte behöver spara det separat. Är projektet redan sparat som något annat (du
@@ -73,7 +83,7 @@ lägger till planen i ett befintligt projekt) rörs det inte; spara det som vanl
 
 ## Planens uppgifter
 
-Klicka **Planens uppgifter**. Dialogen har fem flikar:
+Klicka **Planens uppgifter**. Dialogen har sex flikar:
 
 - **Planen**: kommun, titel och datum då planen påbörjades. Nytt innehåll får samma datum påbörjat. (Planen
   räknas som framtagen digitalt; äldre översiktsplaner digitaliseras inte i pluginet.)
@@ -88,11 +98,29 @@ Klicka **Planens uppgifter**. Dialogen har fem flikar:
   datum. *Lägg till fil…* fyller i namn och sökväg. Lantmäteriets format kräver minst ett underlag. Dokument med samma
   underlagstyp samlas under samma underlag i exporten, och bara webbadresser följer med som länkar. Underlagen sparas i
   tabellerna *Underlag*, *Underlagets dokument* och *Dokumentreferenser*.
+- **Utbyggnadsordning**: planens etapper, en per rad, med **namn** och **tidsperiod** (till exempel *Etapp 1* och
+  *2027–2035*), i den ordning planen ska byggas ut. Ändra ordningen med *Flytta upp* och *Flytta ned*. Se nedan.
 - **Standardvärden för innehåll**: vertikal avgränsning, om innehållet är under ersättning och presentationsskala.
   Datum påbörjat kommer från fliken *Planen*; ett enskilt objekt kan få ett annat datum i attributformuläret, till
   exempel nytt innehåll i en ändring av planen. Värdena sätts på varje objekt som tilldelas innehåll från och med nu.
 
 Klicka **Spara**. Uppgifterna sparas direkt. Fyll gärna i planhändelsen innan du börjar tilldela innehåll.
+
+### Utbyggnadsordning
+
+Utbyggnadsordningen visar i vilken ordning områden ska byggas ut. Så här använder du den:
+
+1. Lägg in etapperna under **Planens uppgifter**, fliken **Utbyggnadsordning**: namn och tidsperiod, i ordning.
+2. Välj etapp när du tilldelar **mark- och vattenanvändning** (eller utvecklingsinriktning): raden
+   **Utbyggnadsordning** i *Tilldela innehåll* är en lista med planens etapper. Lämna den tom för befintlig eller
+   bevarad användning. Samma lista finns i attributformuläret och attributtabellen.
+3. I **kartan** ritas mark- och vattenanvändning i en etapp med **kraftig streckad kant**, och färgen går från
+   **mättad** (första etappen) till **ljus** (sista), i användningens egen färgton. Ytor utan etapp ritas som förut.
+   Etappen står under namnet i kartan, och teckenförklaringen visar varje användning med dess etapper.
+
+Objektet får etappens hela text, till exempel *Etapp 1 (2027–2035)*, och den följer med i exporten till
+Lantmäteriet (fältet *utbyggnadsordning*). Byter du namn eller period på en etapp får objekten den nya texten. Tar du
+bort en etapp behåller objekten sin text men ritas som befintliga.
 
 ## Rita och tilldela innehåll
 
@@ -275,7 +303,8 @@ Se [Symbologi](symbologi.md), och ändra fritt under lagrets egenskaper.
 Specifikationen är i testversion. Filen innehåller:
 
 - **planen**: kommun, titel, planhändelse, datum, underlag och kopplingar till planhandlingen,
-- **beslutet**: diarienummer och datum, om det är ifyllt under Planens uppgifter, och vilket innehåll det gäller,
+- **besluten**: antagandebeslutet (diarienummer och datum, om det är ifyllt under Planens uppgifter) och ändringarnas
+  beslut, med vad varje beslut gäller,
 - **allt innehåll**: innehållstyp och övriga uppgifter, geometrin i planens koordinatsystem och kopplingarna till planhandlingens
   bokmärken.
 
@@ -297,11 +326,135 @@ kvar.
 
 Formatet kräver att planen har minst ett **underlag**; lägg till det under *Planens uppgifter*, fliken *Underlag*.
 
-### Antagandebeslutet gäller innehållet
+### Kontrollen
 
-När du sparar antagandebeslutet under *Planens uppgifter*, fliken *Beslut*, får allt innehåll som ännu inte hör till
-ett beslut beslutets id (fältet *beslut*). Innehåll som redan hör till ett annat beslut, till exempel en senare ändring,
-rörs inte. I exporten räknar beslutet upp planen och det innehåll det gäller.
+Kontrollen går igenom det som Lantmäteriets format kräver och reglerna i Lantmäteriets specifikation (test 4). En
+anmärkning som kommer från en regel börjar med regelns id, till exempel `[OP-JSON-042]`, så att du kan slå upp den.
+Exempel: en antagen plan ska ha underlagen *Länsstyrelsens granskningsyttrande* och *Miljökonsekvensbeskrivning* och
+ett beslut; Plangeometri och Område ska ha geometri; linjer och ytkanter får inte korsa sig själva eller ha spikar
+(vinklar på 12° eller mindre); planhandlingen ska vara ett Word-dokument. Kontrollen är pluginets tolkning av
+reglerna. Lantmäteriets egen validering i NGP kan hitta mer.
+
+### Beslut i exporten
+
+**Antagandebeslutet** (Planens uppgifter, fliken *Beslut*) gäller planen som helhet: i exporten påverkar det bara
+planen. Lantmäteriets regel OP-JSON-005 tillåter inte att ett beslut påverkar både planen och innehåll. En
+**ändring** av planen får ett eget beslut, som påverkar det innehåll som ändringen gäller (se nedan).
+
+## Ändring av översiktsplanen
+
+En ändring är ett eget planärende för en del av översiktsplanen, med egen planhändelse och eget beslut. Öppna
+**Ändring av översiktsplanen…** i menyn.
+
+1. **Påbörja ändringen:** namn (till exempel *Tillägg för vindbruk*), diarienummer, datum då kommunen beslutade att
+   påbörja ändringen, och planhändelse. Ändringen sparas som ett beslut i tabellen *Beslut*.
+2. **Rita och tilldela som vanligt.** Medan ändringen pågår får nytt innehåll ändringens planhändelse, datum påbörjat
+   och beslut.
+3. **Befintligt innehåll:** markera det i kartan (verktyget *Markera*) och klicka
+   - **Lägg markerat innehåll i ändringen** om det ändras, eller
+   - **Markera som under ersättning** om nytt innehåll ska ersätta det. Det exporteras då med *under ersättning*.
+4. **Planhändelsen** för ändringen (till exempel *Klar för granskning*) ändrar du under *Ändringens
+   planhändelse och beslut* och klickar **Spara uppgifterna**. Allt innehåll i ändringen får den. Planens egen
+   planhändelse i *Planens uppgifter* rör inte ändringens innehåll.
+5. **Anta ändringen:** fyll i diarienummer och datum då den antogs (och laga kraft när det är klart) och klicka **Anta
+   ändringen**. Innehållet i ändringen får planhändelsen *Antagen*. Med rutan *Ta bort innehållet under ersättning*
+   ikryssad tas det ersatta innehållet bort (du får frågan först).
+
+Bara en ändring kan pågå åt gången. **Avbryt ändringen** gör att nytt innehåll inte längre hör till den; innehållet och
+beslutet finns kvar. Så länge ändringens beslut saknar datum följer beslutet inte med i exporten, och innehållet
+exporteras utan beslut.
+
+## Befintlig markanvändning från Lantmäteriets Topografi 10
+
+**Markanvändning från Topografi 10** (knappen med färgade ytor i verktygsfältet, eller i menyn) skapar befintlig mark- och vattenanvändning ur Lantmäteriets
+*Topografi 10* (eller *Marktäcke*), så att du slipper rita skog, åker, sjöar, bebyggelse, större vägar, järnvägar och
+vattendrag själv.
+
+1. **Ladda ner Topografi 10 för kommunen** från Lantmäteriets Geotorget (kräver ett konto där; pluginet kan inte
+   hämta filen själv). Nedladdningen är en GeoPackage per tema (mark, kommunikation, hydrografi,
+   anläggningsområde …), ofta i en zip-fil. Välj zip-filen direkt, eller en enskild GeoPackage. Marktäcke går också.
+2. Öppna **Markanvändning från Topografi 10…** och välj filen. Tabellen visar allt i filen som kan omklassas: skikt,
+   geometri (yta, linje, punkt) och objekttyp (för anläggningsområden också ändamålet, till exempel *Rekreation –
+   Golfbana*), och vilken mark- och vattenanvändning det blir. Ändra där du vill; ditt val sparas till nästa gång, och
+   *Återställ förslaget* tar tillbaka pluginets förslag.
+3. Klicka **Skapa markanvändning**. Allt tas med, hur litet det än är:
+   - **ytor** med samma användning slås ihop och läggs i *Mark- och vattenanvändning (yta)*. Anläggningsområden
+     (golfbanor, parker, skolor …), flygplatser och transformatorområden går före markslagen under dem;
+   - **vägar, järnvägar, vattendrag och ledningar** slås ihop till sammanhängande linjer i *Mark- och
+     vattenanvändning (linje)*;
+   - **punkter** (vindkraftverk, järnvägsstationer, helikopterplatser, små anläggningsområden) hamnar i *Mark- och
+     vattenanvändning (punkt)*, om du väljer en användning för dem i tabellen. Punkter och byggnader föreslås inte.
+   Allt klipps mot planens avgränsning, får ingen utbyggnadsordning (befintlig användning) och preciseringen *Från
+   Lantmäteriet (…)* med objekttyperna. Spara med disketten.
+
+Kör du igen ersätts det som skapades förra gången (rutan *Ersätt …*). Det du ritat själv rörs inte.
+
+Pluginets förslag till omklassning, i korthet:
+
+| Topografi 10 | Mark- och vattenanvändning |
+|---|---|
+| Sluten bebyggelse, Torg | Funktionsblandad bebyggelse |
+| Hög och låg bebyggelse | Bostadsbebyggelse |
+| Industri- och handelsbebyggelse, industriområden (gruva, täkt …) | Verksamheter |
+| Öppen mark, Åker, Barr- och blandskog, Lövskog | Landsbygd |
+| Fruktodling | Jordbruk |
+| Kalfjäll, Fjällbjörkskog, Glaciär | Natur- och kulturlandskap |
+| Hav, Sjö, Vattendragsyta, Anlagt vatten; Vattendrag (linje) | Vatten |
+| Parkområde, Koloniområde, Begravningsplats | Grönområde |
+| Övriga rekreationsområden och idrottsplatser | Friluftsliv och rekreation |
+| Samhällsfunktion (skola, sjukhus …) | Service |
+| Energiproduktion (område) | Energiproduktion |
+| Avfallsanläggning, Transformatorområde, Kraftledning stam och region | Teknisk infrastruktur |
+| Flygplatsområde | Luftfart |
+| Motorväg, motortrafikled, mötesfri väg, landsväg, övergripande länk, huvudgata | Vägtrafik (linje) |
+| Järnväg, Spårväg, Tunnelbana | Järnväg |
+| Färjeled | Sjöfart (linje) |
+| Rengärde | Renskötsel |
+| Mindre vägar, gator, stigar, sankmark | tas inte med |
+| Byggnader och alla punkter (vindkraftverk, stationer …) | föreslås inte; välj själv i tabellen |
+
+**Tänk på:** Topografi 10 visar vad som finns på marken, inte alltid vad den används till. Låg bebyggelse kan vara
+fritidshus och öppen mark kan vara en park. Se resultatet som en grund att rätta: ändra innehållstyp med *Tilldela
+innehåll*, och rita det som saknas.
+
+## Hämta riksintressen
+
+**Hämta riksintressen** (kartan med röd pil i verktygsfältet, eller i menyn) hämtar riksintressena enligt 3 och 4 kap. miljöbalken ur Boverkets samlade karttjänst
+*Riksintressen* och lägger in dem som underlag i gruppen *Riksintressen enligt 3 och 4 kap. MB*.
+
+- Kryssa i vilka riksintressen du vill ha (alla är ikryssade från början).
+- Välj område: **planens avgränsning** (det du ritat i Plangeometri) eller **kartans utsnitt**.
+- Med **Klipp riksintressena mot planens avgränsning** tas bara den del med som ligger i planen.
+- Klicka **Hämta**. Varje objekt får myndighetens id (till exempel Naturvårdsverkets riksintresse-id eller
+  Trafikverkets identifieringskod), namnet och dagens datum som *hämtat datum*. Hämtar du igen läggs bara nya
+  riksintressen in.
+- Med **Lägg också in dem som kommunens ställningstagande** kopieras varje riksintresse som läggs in även till
+  *Riksintresse, kommunens ställningstagande* (se nedan). Ta sedan bort de kopior kommunen inte tar ställning till.
+- Avsluta redigeringen med disketten för att spara.
+
+Boverket sammanställer myndigheternas underlag men kan inte garantera att det är aktuellt; det är länsstyrelsen som
+ansvarar för planeringsunderlaget. Påverkansområden (till exempel buller- och hinderytor kring flygplatser) hämtas inte.
+
+### Kommunens ställningstagande till riksintressena
+
+De två riksintressegrupperna betyder olika saker:
+
+- **Riksintressen enligt 3 och 4 kap. MB** är statens anspråk: underlag som du hämtar och inte ändrar i.
+- **Riksintresse, kommunens ställningstagande** är kommunens svar: hur kommunen ser på riksintresset och hur den
+  tänker tillgodose det. Preciserar kommunen gränsen ritas den här.
+
+Så här arbetar du:
+
+1. Hämta riksintressena (ovan).
+2. Markera de riksintressen kommunen tar ställning till med verktyget **Markera**, och välj **Skapa kommunens
+   ställningstagande för markerade riksintressen** i menyn. Varje markerat riksintresse kopieras med samma värde,
+   namn, id och geometri, och kopian kopplas till riksintresset med *berör annat innehåll*. Ett riksintresse som
+   redan har ett ställningstagande hoppas över.
+3. Justera gränsen där kommunen preciserar den.
+4. Skriv kommunens ställningstagande i planhandlingen under en rubrik med avsnittstypen *Ställningstagande* och koppla
+   avsnittet till objektet med *Skapa bokmärken i planhandling*.
+
+Pågår en ändring av planen hör nya ställningstaganden till den, som annat nytt innehåll.
 
 ### Leverera till NGP
 

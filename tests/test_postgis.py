@@ -469,6 +469,7 @@ class PluginTests(PostgisCase):
             dialog.kommun.set_kommun("Eskilstuna")
             dialog.titel.setText("ÖP Nord")
             dialog.use_postgis.setChecked(True)
+            dialog.municipality_area.setChecked(False)  # inget nätverk i testerna
             dialog.folder.setFilePath(str(self.dir))
             self.assertTrue(dialog.is_valid())
             return True

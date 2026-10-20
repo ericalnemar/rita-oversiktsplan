@@ -10,7 +10,7 @@ from pathlib import Path
 from qgis.core import QgsCoordinateReferenceSystem
 from qgis.gui import QgsFileWidget
 from qgis.PyQt.QtCore import QDate
-from qgis.PyQt.QtWidgets import (QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
                                  QLabel, QLineEdit, QRadioButton, QVBoxLayout, QWidget)
 
 from ..core import geopackage, model, storage
@@ -117,6 +117,12 @@ class NewPlanDialog(QDialog):
         form.addRow("", self.postgis_box)
         form.addRow("Koordinatsystem", self.crs)
         form.addRow("Påbörjad", self.paborjad)
+        self.municipality_area = QCheckBox("Hämta kommunens hela yta från Lantmäteriet")
+        self.municipality_area.setChecked(True)
+        self.municipality_area.setToolTip(
+            "Kommunens yta (Lantmäteriets kommunytor) blir planens plangeometri direkt. Kryssa ur om planen gäller en "
+            "mindre del av kommunen: då ritar du plangeometrin själv.")
+        form.addRow("Plangeometri", self.municipality_area)
 
         self.about = QLabel(f"Planen skapas med Boverkets GIS-databasmodell och värden ur ÖP-katalogen "
                             f"{bundled().version}.")

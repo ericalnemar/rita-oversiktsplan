@@ -139,10 +139,12 @@ def create_without_geometry(group, assignment: Assignment) -> str:
 
 def new_content_values(group) -> dict[str, object]:
     """Värdena nytt innehåll får från början: standardvärdena under Planens uppgifter, och planens planhändelse och
-    datum påbörjat (innehållets datum påbörjat skiljer sig bara i en ändring av planen, och ändras då per objekt)."""
+    datum påbörjat. Pågår en ändring av planen får innehållet i stället ändringens planhändelse, datum påbörjat och
+    beslut (se :mod:`andring`)."""
+    from . import andring
     defaults = plan_storage(group).read_defaults()
     plan = plan_feature(group)
-    return {
+    values = {
         "vertikal_avgransning": defaults["vertikal_avgransning"] or None,
         "under_ersattning": defaults["under_ersattning"] == "1",
         "datum_paborjat": plain(plan["datum_paborjat"]) if plan is not None else None,
@@ -151,6 +153,8 @@ def new_content_values(group) -> dict[str, object]:
         "planhandelse_varde": plain(plan["planhandelse_varde"]) if plan is not None else None,
         "planhandelse_datum": plain(plan["planhandelse_datum"]) if plan is not None else None,
     }
+    values.update(andring.content_values(group))
+    return values
 
 
 # -- planens uppgifter ----------------------------------------------------------------------------------------------
@@ -269,12 +273,11 @@ def write_plan_info(group, info: PlanInfo, update_content: bool) -> int:
     if not layer.commitChanges(started):
         raise ValueError("Kunde inte spara planens uppgifter: " + "; ".join(layer.commitErrors()))
     plan_storage(group).write_defaults(info.defaults)
-    if decision:
-        link_decision(group, decision)
     if not update_content:
         return 0
     changed = 0
     event = {"planhandelse_varde": info.planhandelse, "planhandelse_datum": info.planhandelse_datum}
+    ongoing = plan_storage(group).read_meta().get("andring_beslut") or ""  # en pågående ändrings innehåll rörs inte
     for layer_def in model.CONTENT_LAYERS:
         content = layer_in_group(group, layer_def.name)
         if content is None or content.featureCount() == 0:
@@ -282,32 +285,12 @@ def write_plan_info(group, info: PlanInfo, update_content: bool) -> int:
         idx = {content.fields().indexOf(k): _to_qgis(v) for k, v in event.items()}
         started = not content.isEditable() and content.startEditing()
         for f in content.getFeatures():
+            if ongoing and str(plain(f["beslut"]) or "") == ongoing:
+                continue
             if (plain(f["planhandelse_varde"]), _py_date(f["planhandelse_datum"])) != (
                     info.planhandelse, info.planhandelse_datum):
                 content.changeAttributeValues(f.id(), idx)
                 changed += 1
-        if started and not content.commitChanges():
-            raise ValueError(f"Kunde inte spara {layer_def.alias}: " + "; ".join(content.commitErrors()))
-    return changed
-
-
-def link_decision(group, decision: str) -> int:
-    """Antagandebeslutet gäller planen och allt innehåll som ännu inte har ett beslut: innehållets ``beslut`` får
-    beslutets objektidentitet (och beslutets ``paverkar`` i exporten räknar upp dem). Innehåll som redan hör till ett
-    annat beslut, till exempel en senare ändring, rörs inte. Returnerar antalet objekt som fick beslutet."""
-    changed = 0
-    for layer_def in model.CONTENT_LAYERS:
-        content = layer_in_group(group, layer_def.name)
-        if content is None or content.featureCount() == 0:
-            continue
-        index = content.fields().indexOf("beslut")
-        ids = [f.id() for f in content.getFeatures() if plain(f["beslut"]) is None]
-        if not ids:
-            continue
-        started = not content.isEditable() and content.startEditing()
-        for fid in ids:
-            content.changeAttributeValue(fid, index, decision)
-        changed += len(ids)
         if started and not content.commitChanges():
             raise ValueError(f"Kunde inte spara {layer_def.alias}: " + "; ".join(content.commitErrors()))
     return changed

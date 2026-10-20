@@ -12,7 +12,7 @@ mönsterfyllningar, SVG-bilder eller typsnittssymboler.
 kantlinje (strecktyp och tjocklek) som också används för linjer, och en egen punktform. Då ser man vilken grupp ett
 objekt hör till. Värdena inom gruppen har samma symbol och skiljs åt med färgen (översvämning blå, ras röd …).
 
-  * **Mark- och vattenanvändning** är grunden: färg som täcker till 80 procent (bakgrundskartan anas) och tunn kant.
+  * **Mark- och vattenanvändning** är grunden: färg som täcker till 80 procent (bakgrundskartan anas), utan kant.
     Färgerna utgår från Boverkets färger för detaljplanens användningsområden (samma färgkoder som i Rita
     Detaljplan): Bostadsbebyggelse som B (gul), Verksamheter som Z (beige), Vatten som W (blå) osv. Där detaljplanens
     färger ligger för nära varandra, eller detaljplanen saknar motsvarighet, har värdet fått en egen färg i samma
@@ -21,13 +21,17 @@ objekt hör till. Värdena inom gruppen har samma symbol och skiljs åt med fär
     (Hudiksvall, Bromölla, Danderyd): en färg per tema (den kompletterande utvecklingsinriktningen), breda
     halvgenomskinliga band med pilspets, noder som ringar, och storleken efter sambandsnivån (se
     ``DEVELOPMENT_LEVELS``). Det är byggt för att läsas i skala 1:100 000–1:400 000.
-  * **Övrigt innehåll** ligger ovanpå som överlägg: gruppens kant i värdets färg och en svag, genomskinlig fyllning.
+  * **Övrigt innehåll** ligger ovanpå som överlägg: gruppens kant i värdets färg, en bred bård på insidan av kanten,
+    en mycket svag fyllning och namnet längs kanten (se ``NO_BAND`` för undantagen).
   * **Underlag** som kommunen redovisar men inte själv ställer sig bakom (riksintressen enligt miljöbalken) ritas
-    utan fyllning och med ihålig punkt.
+    som överläggen men med tunn streckad kant och ihålig punkt; namnet säger vilket riksintresse det är.
+  * **Kommunens ställningstagande till riksintressena** har, som alla överlägg, en mycket svag fyllning och en bred bård på insidan av kanten
+    och namnet längs kanten, som i tryckta översiktsplaner. Där riksintressen överlappar (de är ofta stora och många)
+    blir kartan då inte grumlig av starka fyllningar ovanpå varandra, och markanvändningen syns inuti.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 RGB = tuple[int, int, int]
@@ -51,6 +55,21 @@ FARGER: dict[str, RGB] = {
 }
 
 OVERLAY_ALPHA = 46  # fyllningens täckning för överlägg, av 255 (ca 18 %)
+BAND_ALPHA = 110  # bården innanför kanten (ca 43 %), se Group.band
+BAND_FILL_ALPHA = 20  # mycket svag fyllning innanför bården (ca 8 %): man ser var riksintresset gäller, och tre
+# överlappande ger ändå bara ca 22 % täckning
+# Bården i skalsteg: (mest inzoomad skala, mest utzoomad skala, bårdens bredd i mm, kantens bredd som andel av
+# gruppens), 0 = ingen gräns. Utzoomad blir bården smalare, så att den inte kladdar ihop längs flikiga kuster och sjöar.
+# Steg i stället för en referensskala, eftersom stegen följer med till SLD (Min-/MaxScaleDenominator) och GeoServer.
+BAND_STEPS: tuple[tuple[int, int, float, float], ...] = (
+    (0, 50_000, 2.4, 1.0),  # inzoomad: tätorter och detaljer
+    (50_000, 150_000, 1.2, 0.8),  # kommunkartan
+    (150_000, 0, 0.6, 0.6),  # länet och regionen
+)
+BAND_WIDTH = BAND_STEPS[0][2]
+# Grupper vars ytor inte får bård: markanvändningen (heltäckande, egen stil), utvecklingsinriktningen (eget schema),
+# och planens och områdens avgränsning (bara en gräns).
+NO_BAND = ("markochvattenanvandning", "utvecklingsinriktning", "plangeometri", "omrade")
 LAND_USE_ALPHA = 204  # markanvändningens täckning (80 %), så att bakgrundskartan anas
 DETAIL_SCALE = 25_000  # punkter och linjer utom utvecklingsinriktningen syns först från 1:25 000
 LABEL_SCALE = 100_000  # namnen syns från 1:100 000 (utvecklingsinriktningens namn alltid)
@@ -71,6 +90,9 @@ class Group:
     hollow: bool = False  # ingen fyllning och ihålig punkt (underlag, planens avgränsning)
     ring: bool = False  # punkten får en kraftig vit kant, som en ring runt färgen
     label: str = ""  # gruppens symbol i ord, för dokumentationen
+    band: float = 0.0  # ytor: bred halvgenomskinlig bård innanför kanten (mm) och mycket svag fyllning
+    names: str = "center"  # namnen på ytor: "center" (mitt i ytan), "perimeter" (längs kanten) eller "none"
+    value_in_label: bool = False  # etiketten säger också värdet, t.ex. "Vänern – Turism och rörligt friluftsliv"
 
 
 @dataclass(frozen=True)
@@ -79,17 +101,19 @@ class Style:
     color: RGB
     filled: bool = False
     detaljplan: str = ""  # användningen i en detaljplan vars färg är lånad oförändrad
+    line: Optional[RGB] = None  # linjens färg, om den inte ska vara en mörkare ton av ytans (se LINE_COLORS)
 
 
 GROUPS: dict[str, Group] = {
-    "markochvattenanvandning": Group("", 0.2, "circle", label="tunn heldragen kant, fylld cirkel"),
-    "plangeometri": Group("8;2;1;2", 1.0, "square", hollow=True, label="kraftig streck-prick, ingen fyllning"),
+    "markochvattenanvandning": Group("", 0.2, "circle", label="ingen kant, fylld cirkel"),
+    "plangeometri": Group("8;2;1;2", 1.0, "square", hollow=True, names="none",
+                          label="kraftig streck-prick, ingen fyllning, inget namn"),
     "omrade": Group("0.5;1", 0.4, "square", hollow=True, label="tät prickad, ingen fyllning"),
     "utvecklingsinriktning": Group("", 1.0, "circle", hollow=True, ring=True,
                                    label="mjuk kant, breda band med pilspets, nod som ring kring en prick"),
-    "riksintressenop": Group("", 0.8, "triangle", label="heldragen, triangel"),
-    "riksintressen": Group("2;1.5", 0.5, "triangle", hollow=True,
-                           label="tunn streckad, ingen fyllning, ihålig triangel"),
+    "riksintressenop": Group("", 0.5, "triangle", value_in_label=True, label="heldragen, triangel"),
+    "riksintressen": Group("2;1.5", 0.5, "triangle", hollow=True, value_in_label=True,
+                           label="tunn streckad, ihålig triangel"),
     "miljokvalitetsnormer": Group("1;1", 0.6, "square", 45, label="tät prickad, romb"),
     "ovrigaforhallandeavvasentligbetydelse": Group("6;1.5;1;1.5;1;1.5", 0.6, "square", 45, hollow=True,
                                                    label="streck-prick-prick, ihålig romb"),
@@ -107,32 +131,57 @@ GROUPS: dict[str, Group] = {
     "lansstyrelsensinvandning": Group("3;1.5;0.6;1.5;0.6;1.5", 0.9, "circle", ring=True,
                                       label="kraftig streck-prick-prick, cirkel med vit ring"),
 }
+# Alla överlägg utom NO_BAND: ytan får en bred bård innanför kanten och en mycket svag fyllning, och namnet står längs
+# kanten (gruppens strecktyp och punktform är kvar). Gjordes först för kommunens ställningstagande till riksintressena
+# och användes sedan på alla överlägg (användarens önskan 2026-10-20).
+GROUPS = {key: group if key in NO_BAND else replace(group, band=BAND_WIDTH, names="perimeter")
+          for key, group in GROUPS.items()}
 
 
 def _mva(color: RGB | str, detaljplan: str = "") -> Style:
     return Style(FARGER[color] if isinstance(color, str) else color, filled=True, detaljplan=detaljplan)
 
 
+# Topografi 10: Lantmäteriets färger för markytorna (stilfilen Topografi10_vektor_220825.qlr, läst 2026-10-20).
+# Mark- och vattenanvändning som motsvarar ett markslag får markslagets färg, så att befintlig användning ser ut som
+# Lantmäteriets karta (användarens önskan); övriga värden behåller färgerna nedan.
+TOPOGRAFI10: dict[str, tuple[RGB, str]] = {
+    "Bostadsbebyggelse": ((242, 207, 155), "Låg bebyggelse"),
+    "Funktionsblandad bebyggelse": ((217, 148, 97), "Sluten bebyggelse"),
+    "Verksamheter": ((240, 240, 240), "Industri- och handelsbebyggelse"),
+    "Jordbruk": ((255, 247, 166), "Åker"),
+    "Skogsbruk": ((212, 238, 183), "Barr- och blandskog"),
+    "Natur- och kulturlandskap": ((255, 255, 234), "Öppen mark"),
+    "Vatten": ((191, 230, 255), "Sjö, hav och vattendrag"),
+    "Grönområde": ((196, 236, 214), "idrottsplanens gröna, något blågrönare för att skiljas från skogen"),
+}
+
+
+def _topo(value: str) -> Style:
+    color, source = TOPOGRAFI10[value]
+    return Style(color, filled=True, detaljplan=f"Topografi 10: {source}")
+
+
 MARK_OCH_VATTEN: dict[str, Style] = {
-    "Bostadsbebyggelse": _mva("Gul", "B"),
-    "Funktionsblandad bebyggelse": _mva((200, 160, 112)),  # C är brun men för nära Z: här mörkare brun
+    "Bostadsbebyggelse": _topo("Bostadsbebyggelse"),
+    "Funktionsblandad bebyggelse": _topo("Funktionsblandad bebyggelse"),
     "Service": _mva("Röd", "S, D"),
-    "Verksamheter": _mva("Beige", "Z"),
+    "Verksamheter": _topo("Verksamheter"),
     "Teknisk infrastruktur": _mva((158, 172, 194)),  # E är blågrå men för nära W: här gråare
     "Energiproduktion": _mva((124, 112, 178)),  # blåviolett
-    "Vägtrafik": _mva("Ljusgrå", "GATA, VÄG"),
+    "Vägtrafik": _mva((195, 195, 195)),  # mellangrå: GATA:s ljusgrå var för nära Topografi 10:s industrigrå
     "Järnväg": _mva((150, 150, 150)),  # T är grå men för nära GATA: här mörkare grå
     "Luftfart": _mva((204, 178, 240)),  # ljuslila
     "Sjöfart": _mva((52, 84, 140)),  # marinblå
-    "Vatten": _mva("Blå", "W"),
+    "Vatten": _topo("Vatten"),
     "Fiske": _mva((40, 146, 214)),  # klarblå
     "Vattenbruk": _mva((110, 206, 196)),  # blågrön
-    "Grönområde": _mva("Ljusgrön", "PARK"),
-    "Natur- och kulturlandskap": _mva((160, 210, 140)),  # NATUR är ljusgrön som PARK: här mellangrön
+    "Grönområde": _topo("Grönområde"),
+    "Natur- och kulturlandskap": _topo("Natur- och kulturlandskap"),
     "Landsbygd": _mva((206, 196, 176)),  # gråbeige
     "Friluftsliv och rekreation": _mva("Grön", "N"),
-    "Jordbruk": _mva((246, 232, 96)),  # sädesgul (L är grön som N)
-    "Skogsbruk": _mva((64, 136, 72)),  # mörkgrön
+    "Jordbruk": _topo("Jordbruk"),
+    "Skogsbruk": _topo("Skogsbruk"),
     "Renskötsel": _mva((150, 160, 112)),  # grågrön
     "Annan mark- och vattenanvändning": _mva("Rosa"),
 }
@@ -292,6 +341,39 @@ def style_for(category_key: str, value: str) -> Optional[Style]:
 
 def group_for(category_key: str) -> Group:
     return GROUPS[category_key]
+
+
+# Utbyggnadsordning (se utbyggnad): mark- och vattenanvändning i en etapp får gruppens färg i en ton från mörk (första
+# etappen) till ljus (sista), och en kraftig streckad kant i en mörk ton. Utan etapp: som förut (befintligt/bevarat).
+STAGE_SATURATION = 0.5  # första etappen: så här mycket av vägen mot full färgmättnad (samma färgton)
+STAGE_VALUE = 0.92  # första etappen: något mörkare
+STAGE_LIGHT = 0.6  # sista etappen: så här mycket av vägen mot vitt
+STAGE_GREY = 0.08  # färgmättnad under detta räknas som grått
+STAGE_GREY_VALUE = 0.72  # första etappen för grått: så här mycket av ljusheten
+STAGE_DASH = "3;1.5"
+STAGE_EDGE = 0.7
+
+
+# Linjer för mark- och vattenanvändning ritas i en mörkare ton av ytans färg; några värden har en egen linjefärg.
+LINE_COLORS: dict[str, RGB] = {
+    "Vägtrafik": (178, 178, 178),  # ljusare grå (användarens önskan), som vägarna i en översiktskarta
+}
+for _value, _color in LINE_COLORS.items():
+    MARK_OCH_VATTEN[_value] = replace(MARK_OCH_VATTEN[_value], line=_color)
+
+
+def stage_color(color: RGB, index: int, count: int) -> RGB:
+    """Färgen för etapp nummer ``index`` (0 = första) av ``count``: från mättad och mörkare till ljus, i samma
+    färgton. (Att bara göra färgen mörkare gjorde gult till oliv, som såg ut som en annan användning.)"""
+    import colorsys
+    t = index / (count - 1) if count > 1 else 0.0
+    h, s, v = colorsys.rgb_to_hsv(*(c / 255 for c in color))
+    if s < STAGE_GREY:  # grått (t.ex. Topografi 10:s industrigrå) har ingen färgton att mätta: gör det mörkare
+        dark = colorsys.hsv_to_rgb(h, s, v * STAGE_GREY_VALUE)
+    else:
+        dark = colorsys.hsv_to_rgb(h, s + (1 - s) * STAGE_SATURATION, v * STAGE_VALUE)
+    light = tuple(c / 255 + (1 - c / 255) * STAGE_LIGHT for c in color)
+    return tuple(round(255 * (d + (l - d) * t)) for d, l in zip(dark, light))  # type: ignore[return-value]
 
 
 def darker(color: RGB, factor: float = 0.55) -> RGB:

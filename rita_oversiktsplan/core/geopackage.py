@@ -42,6 +42,7 @@ class NewPlan:
     datum_paborjat: datetime.date
     digitalt_ursprung: bool = True
     epsg: int = model.EPSG  # planens koordinatsystem: SWEREF 99 TM eller en lokal SWEREF 99-zon
+    plan_area: tuple[dict, ...] = ()  # plangeometri från början (GeoJSON i planens koordinatsystem), se kommunyta
 
 
 LOOKUP_COLUMNS = ("vardereferens", "grupp_varde", "gruppreferens", "version_opkatalogen")
@@ -80,6 +81,8 @@ def create_geopackage(path: str | Path, plan: Optional[NewPlan], catalog: Option
             _create_lookup(ds, lookup, catalog if plan is not None else None)
         if plan is not None:
             _insert_plan(ds.GetLayerByName(model.OVERSIKTSPLAN.name), plan)
+            if plan.plan_area:
+                _insert_plan_area(ds.GetLayerByName("innehall_op_plangeometri"), plan)
         _create_meta(ds, {"schema_version": str(model.SCHEMA_VERSION), "databasmodell": model.DATABASMODELL,
                           "spec_version": model.SPEC_VERSION, "opkatalog_version": catalog.version,
                           "epsg": str(epsg), **model.DEFAULT_VALUES} if plan is not None else {})
@@ -191,6 +194,28 @@ def _insert_plan(layer: ogr.Layer, plan: NewPlan) -> None:
     feature.SetField("datum_paborjat", d.year, d.month, d.day, 0, 0, 0, 0)
     feature.SetField("digitalt_ursprung", 1 if plan.digitalt_ursprung else 0)
     layer.CreateFeature(feature)
+
+
+def _insert_plan_area(layer: ogr.Layer, plan: NewPlan) -> None:
+    """Plangeometrin som planen börjar med (kommunens yta), med samma värden som innehåll som tilldelas i QGIS."""
+    import json
+    now = datetime.datetime.now()
+    d = plan.datum_paborjat
+    for shape in plan.plan_area:
+        geometry = ogr.CreateGeometryFromJson(json.dumps(shape))
+        if geometry is None or geometry.IsEmpty():
+            continue
+        geometry = ogr.ForceToMultiPolygon(geometry)
+        feature = ogr.Feature(layer.GetLayerDefn())
+        feature.SetField("objektidentitet", str(uuid.uuid4()))
+        feature.SetField("versiongiltigfran", now.year, now.month, now.day, now.hour, now.minute, now.second, 0)
+        feature.SetField("innehallstyp_varde", "Plangeometri")
+        feature.SetField("namn", plan.kommunnamn)
+        feature.SetField("under_ersattning", 0)
+        feature.SetField("illustrativa_granser", 1)
+        feature.SetField("datum_paborjat", d.year, d.month, d.day, 0, 0, 0, 0)
+        feature.SetGeometry(geometry)
+        layer.CreateFeature(feature)
 
 
 def _create_meta(ds: ogr.DataSource, values: dict[str, str]) -> None:

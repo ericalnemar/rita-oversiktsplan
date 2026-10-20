@@ -12,7 +12,7 @@ from qgis_app import get_app  # noqa: E402
 
 get_app()
 
-from qgis.core import QgsPointXY  # noqa: E402
+from qgis.core import NULL, QgsPointXY  # noqa: E402
 
 from rita_oversiktsplan.core import content, export_lm, model, relations  # noqa: E402
 from rita_oversiktsplan.core.project import plan_storage  # noqa: E402
@@ -108,25 +108,24 @@ class DecisionTests(ToolCase):
         content.write_plan_info(self.group, info, update_content=False)
         return content.read_plan_info(self.group).beslut, str(content.decision_feature(self.group)["objektidentitet"])
 
-    def test_the_decision_applies_to_content_without_a_decision(self):
+    def test_the_adoption_decision_affects_the_plan_and_not_the_content(self):
         housing = self.assigned()
         _, decision = self.save_decision()
-        self.assertEqual(str(housing.layer.getFeature(housing.fid)["beslut"]), decision)
-        collection, _ = export_lm.export(self.group)
-        affected = features(collection, "beslutOP")[0]["paverkar"]
-        self.assertEqual([a["objekttyp"] for a in affected], ["oversiktsplan", "innehallOP"])
-        self.assertEqual(affected[1]["identitet"], str(housing.layer.getFeature(housing.fid)["objektidentitet"]))
+        self.assertIn(housing.layer.getFeature(housing.fid)["beslut"], (None, NULL))  # innehållet rörs inte
+        collection, problems = export_lm.export(self.group)
+        (beslut,) = features(collection, "beslutOP")
+        self.assertEqual([a["objekttyp"] for a in beslut["paverkar"]], ["oversiktsplan"])  # OP-JSON-005
+        self.assertFalse([p for p in problems if "OP-JSON-005" in p.text])
 
-    def test_content_that_belongs_to_another_decision_is_left_alone(self):
+    def test_old_content_pointing_at_the_adoption_decision_is_exported_without_it(self):
         housing = self.assigned()
+        _, decision = self.save_decision()
         layer = housing.layer
-        identity = layer.getFeature(housing.fid)["objektidentitet"]
-        layer.changeAttributeValue(housing.fid, layer.fields().indexOf("beslut"), "annat-beslut")
-        self.assertTrue(layer.commitChanges())
-        self.save_decision()
-        saved = next(f for f in layer.getFeatures() if f["objektidentitet"] == identity)
-        self.assertEqual(saved["beslut"], "annat-beslut")
-
+        layer.changeAttributeValue(housing.fid, layer.fields().indexOf("beslut"), decision)  # som i 0.1.1–0.1.4
+        collection, _ = export_lm.export(self.group)
+        self.assertNotIn("beslut", features(collection, "innehallOP")[0])
+        (beslut,) = features(collection, "beslutOP")
+        self.assertEqual([a["objekttyp"] for a in beslut["paverkar"]], ["oversiktsplan"])
 
 if __name__ == "__main__":
     unittest.main()

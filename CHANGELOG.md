@@ -4,6 +4,69 @@ Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/), versi
 
 ## Ej utgivet
 
+## [0.1.5] – Lantmäteriets regler, riksintressen, utbyggnadsordning och Topografi 10
+
+- **Exporten kontrollerar Lantmäteriets regler.** Utöver det som formatet kräver kontrolleras nu reglerna i
+  Lantmäteriets objekttypskatalog och dataproduktspecifikation (test 4). Anmärkningen visar regelns id, till exempel
+  `[OP-JSON-042]`:
+  - exakt en översiktsplan och bara objekttyperna oversiktsplan, innehallOP och beslutOP (OP-JSON-001, -002),
+  - kommunkoden har fyra siffror, bokmärkesnamnen följer Lantmäteriets mönster (OP-JSON-004, -003),
+  - ett beslut påverkar antingen planen eller innehåll, aldrig båda (OP-JSON-005),
+  - värden ur ÖP-katalogen har rätt id för värde och grupp (OP-JSON-006),
+  - Plangeometri och Område har geometri (OP-JSON-034, -038),
+  - en antagen eller fastställd plan har underlagen *Länsstyrelsens granskningsyttrande* och
+    *Miljökonsekvensbeskrivning* och minst ett beslut (OP-JSON-042, -044),
+  - regler för planer som inte tagits fram digitalt (OP-JSON-032, -036),
+  - linjer och ytkanter korsar inte sig själva, och har inga spikar (vinkel på högst 12°) (ÖP-X04, -X05),
+  - planhandlingen är ett Word-dokument (Office Open XML) (ÖP-X07).
+  Kontrollen är pluginets tolkning av reglerna; den är inte provad mot Lantmäteriets validering i NGP.
+- **Antagandebeslutet gäller planen.** Förut fick allt innehåll antagandebeslutets id, och i exporten räknade beslutet
+  upp både planen och innehållet. Det bryter mot OP-JSON-005. Nu påverkar antagandebeslutet bara planen, och innehåll
+  får ett eget beslut bara när det ändras i en ändring av planen. Innehåll som redan har antagandebeslutets id
+  exporteras utan det.
+- **Nytt: Ändring av översiktsplanen…** i menyn. Påbörja en ändring med namn, diarienummer, datum och planhändelse.
+  Medan den pågår hör nytt innehåll till ändringen (egen planhändelse, eget datum påbörjat och ändringens beslut).
+  Befintligt innehåll kan läggas i ändringen eller markeras som *under ersättning*. När ändringen antas får dess
+  innehåll planhändelsen *Antagen*, och innehållet under ersättning kan tas bort. En pågående ändring följer med i
+  exporten, men utan sitt beslut, tills beslutet har ett datum.
+- **Nytt: Hämta riksintressen…** i menyn. Hämtar riksintressena enligt 3 och 4 kap. miljöbalken ur Boverkets samlade
+  karttjänst, inom planens avgränsning eller kartans utsnitt, och lägger in dem som underlag i gruppen *Riksintressen
+  enligt 3 och 4 kap. MB*. De klipps mot planens avgränsning, får myndighetens id och namn, och dagens datum som
+  hämtat datum. En ny hämtning lägger inte in samma riksintressen igen.
+- **Knappen Hämta riksintressen** i verktygsfältet, efter Importera geometri. Den öppnar samma dialog som menyvalet.
+- **Ny översiktsplan kan hämta kommunens hela yta** från Lantmäteriet och lägga den som plangeometri (rutan är ikryssad från början; kryssa ur den om planen gäller en mindre del av kommunen). Fungerar både för en plan i en fil och i en databas.
+- **Nytt: Skapa kommunens ställningstagande för markerade riksintressen** i menyn. Kopierar de markerade hämtade
+  riksintressena till *Riksintresse, kommunens ställningstagande*, med samma värde, namn, id och geometri, och kopplar
+  varje kopia till sitt riksintresse med *berör annat innehåll*. I *Hämta riksintressen* finns också rutan *Lägg också
+  in dem som kommunens ställningstagande*, som gör samma sak för allt som hämtas.
+- **Nytt: Markanvändning från Topografi 10…** i menyn. Gör om Lantmäteriets Topografi 10 (zip-filen med en GeoPackage per tema, som man laddar ner själv från Geotorget) eller Marktäcke till befintlig mark- och vattenanvändning: markslag och anläggningsområden blir ytor, större vägar, järnvägar, vattendrag och ledningar linjer, och vindkraftverk, stationer m.m. punkter. Omklassningen visas i en tabell som går att ändra (valet sparas). Ytor och linjer med samma värde slås ihop och klipps mot planens avgränsning; allt tas med oavsett storlek. En ny körning ersätter det som skapades förra gången; ritade objekt rörs inte.
+- **Mark- och vattenanvändningen har Topografi 10:s färger** där det finns ett motsvarande markslag (bostäder, funktionsblandat, verksamheter, jordbruk, skogsbruk, natur- och kulturlandskap, vatten; grönområde i en ton nära idrottsplanernas), enligt Lantmäteriets stilfil. Etapperna i utbyggnadsordningen utgår från samma färger; grått blir mörkare grått i stället för en annan färg.
+- **Förslaget i Markanvändning från Topografi 10** (efter användarens prov): öppen mark, åker, barr- och blandskog
+  och lövskog blir *Landsbygd*; byggnader och punkter föreslås inte (de går att välja i tabellen).
+- **Vägar som linje ritas i en ljusare grå.**
+- **Knapp i verktygsfältet för Markanvändning från Topografi 10**, efter Hämta riksintressen.
+- **Befintlig mark- och vattenanvändning har ingen kantlinje**, bara färgen (användarens önskan).
+- **Nytt: Utbyggnadsordning** (användarens önskan). En ny flik i Planens uppgifter där planens etapper läggs in
+  med namn och tidsperiod, i ordning. Etapperna går att välja för mark- och vattenanvändning och utvecklingsinriktning
+  i Tilldela innehåll och i formuläret. I kartan ritas mark- och vattenanvändning i en etapp med kraftig streckad kant
+  och en färg från mättad (första etappen) till ljus (sista), och etappen står under namnet.
+- **Alla överlägg ritas med bård** (användarens önskan): ytorna för miljökvalitetsnormer, klimatrisker,
+  bostadsförsörjning och de andra överläggen har nu, som kommunens ställningstagande till riksintressena, en bred bård
+  på insidan av kanten, en mycket svag fyllning och namnet längs kanten. Gruppens strecktyp är kvar i ytterkanten.
+  Riksintressena enligt miljöbalken (underlaget) har samma bård, svaga fyllning, skalsteg och namn, men tunn streckad
+  kant. Markanvändningen, utvecklingsinriktningen, plangeometrin och områden är som förut.
+- **Plangeometrin visar inget namn** i kartan (kommunens namn stod mitt i kommunen).
+- **Etiketten säger vilket riksintresse det är:** riksintressena och kommunens ställningstagande visar till exempel *Vänern – Turism och
+  rörligt friluftsliv* i stället för bara *Vänern*.
+- **Hämtade ytor och linjer förenklas** med 5 meters tolerans, och hål mindre än 1 000 m² tas bort. Myndigheternas
+  ytor kan ha tiotusentals brytpunkter (Klarälvens översvämningsyta i Munkfors: 26 000), och kartan tog då upp till
+  flera minuter att rita; nu under en sekund.
+- **Tydligare riksintressen i kartan.** Kommunens ställningstagande har en bred bård på insidan av kanten och bara
+  en mycket svag fyllning (cirka 8 %, förut 18 %), och namnet står längs kanten.
+  Förut blev kartan grumlig där riksintressen överlappade, och namnen stod dubbelt. Bården blir smalare i tre steg
+  när man zoomar ut (2,4 mm till 1:50 000, 1,2 mm till 1:150 000, sedan 0,6 mm). Gäller planer som läggs till i
+  kartan från och med nu; ett sparat projekt behåller sina symboler.
+
 ## [0.1.4] – objektidentiteten syns, enklare Planens uppgifter
 
 - **Objektets UUID (objektidentitet) syns** i formuläret och attributtabellen, skrivskyddat. Förut var fältet dolt,

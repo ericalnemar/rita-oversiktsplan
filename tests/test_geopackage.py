@@ -182,14 +182,14 @@ class LoadPlanTests(PlanFileCase):
         expression = layer.defaultValueDefinition(layer.fields().indexOf("planhandelse_varde")).expression()
         self.assertIn(self.layers["oversiktsplan"].id(), expression)
 
-    def test_land_use_is_drawn_with_one_symbol_per_catalog_value_in_detailed_plan_colours(self):
+    def test_land_use_is_drawn_with_one_symbol_per_catalog_value_in_topografi_10_colours(self):
         renderer = self.layers["innehall_op_markochvattenanvandning_polygon"].renderer()
         self.assertIsInstance(renderer, QgsCategorizedSymbolRenderer)
         self.assertEqual(renderer.classAttribute(), "innehallstyp_varde")
         categories = {c.value(): c for c in renderer.categories()}
         self.assertEqual(len(categories), 21 + 1)  # värdena + "ej vald"
         bostad = categories["Bostadsbebyggelse"].symbol().symbolLayer(0).color()
-        self.assertEqual((bostad.red(), bostad.green(), bostad.blue()), (255, 255, 206))  # Gul, som B i detaljplan
+        self.assertEqual((bostad.red(), bostad.green(), bostad.blue()), (242, 207, 155))  # Topografi 10: Låg bebyggelse
         self.assertEqual(renderer.categories()[-1].label(), "Innehållstyp ej vald")
 
     def test_content_without_a_type_is_drawn_as_not_chosen(self):
@@ -197,14 +197,16 @@ class LoadPlanTests(PlanFileCase):
         feature = QgsFeature(layer.fields())
         feature.setGeometry(QgsGeometry.fromWkt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"))
         context = QgsRenderContext()
+        context.setRendererScale(25_000)  # ytorna har bården i skalsteg
         renderer = layer.renderer().clone()
         renderer.startRender(context, layer.fields())
         try:
-            symbol = renderer.symbolForFeature(feature, context)
+            symbols = renderer.symbolsForFeature(feature, context)  # regelbaserad: symbolForFeature ger None
+            symbol = symbols[0] if symbols else None
         finally:
             renderer.stopRender(context)
         self.assertIsNotNone(symbol)
-        color = symbol.symbolLayer(1).color()  # kanten
+        color = symbol.symbolLayer(symbol.symbolLayerCount() - 1).color()  # kanten
         self.assertEqual((color.red(), color.green(), color.blue()), styles.UNASSIGNED_COLOR)
 
     def test_lines_and_points_are_classified_the_same_way(self):
@@ -219,21 +221,41 @@ class LoadPlanTests(PlanFileCase):
         filters = [r.filterExpression() for r in renderer.rootRule().children()]
         self.assertIn("\"kompletterandeInnehallstyp\" = 'Grön- och blåstruktur'", filters)
 
-    def test_overlays_have_a_faint_fill_so_land_use_shows_through(self):
-        renderer = self.layers["innehall_op_riksintressenop_polygon"].renderer()
-        category = next(c for c in renderer.categories() if c.value() == "Naturvård")
-        self.assertEqual(category.symbol().symbolLayer(0).color().alpha(), styles.OVERLAY_ALPHA)
+    def test_overlay_areas_have_a_band_a_very_faint_fill_and_their_groups_edge(self):
+        renderer = self.layers["innehall_op_klimatrelateradrisk_polygon"].renderer()
+        root = renderer.rootRule()
+        rule = next(r for r in root.children() if r.label() == "Risk för översvämning")
+        symbol = rule.children()[0].symbol()
+        self.assertEqual(symbol.symbolLayer(0).color().alpha(), styles.BAND_FILL_ALPHA)
+        self.assertEqual(symbol.symbolLayer(1).color().alpha(), styles.BAND_ALPHA)
+        self.assertTrue(symbol.symbolLayer(2).useCustomDashPattern())  # gruppens streckade kant är kvar
+
+    def test_land_use_development_and_boundaries_have_no_band(self):
+        for key in styles.NO_BAND:
+            self.assertFalse(styles.GROUPS[key].band, key)
+        self.assertIsInstance(self.layers["innehall_op_markochvattenanvandning_polygon"].renderer(),
+                              QgsCategorizedSymbolRenderer)
 
     def test_every_symbol_is_built_from_simple_symbol_layers_only(self):
         for table, layer in self.layers.items():
-            if not isinstance(layer.renderer(), QgsCategorizedSymbolRenderer):
+            renderer = layer.renderer()
+            if isinstance(renderer, QgsCategorizedSymbolRenderer):
+                categories = renderer.categories()
+                symbols = [(c.value(), c.symbol()) for c in categories]
+                most = 2
+            elif table.endswith("_polygon") and not any(key in table for key in styles.NO_BAND):
+                # bården i skalsteg: fyllning, bård och kant
+                root = renderer.rootRule()
+                symbols = [(f"{rule.label()} {step.label()}", step.symbol()) for rule in root.children()
+                           for step in rule.children()]
+                most = 3
+            else:
                 continue
-            for category in layer.renderer().categories():
-                symbol = category.symbol()
-                self.assertLessEqual(symbol.symbolLayerCount(), 2, f"{table}: {category.value()}")
+            for value, symbol in symbols:
+                self.assertLessEqual(symbol.symbolLayerCount(), most, f"{table}: {value}")
                 for i in range(symbol.symbolLayerCount()):
                     self.assertIn(symbol.symbolLayer(i).layerType(), symbology.SIMPLE_LAYER_TYPES,
-                                  f"{table}: {category.value()}")
+                                  f"{table}: {value}")
 
     def test_the_style_exports_to_sld_for_geoserver_with_only_standard_parts(self):
         for table in ("innehall_op_markochvattenanvandning_polygon", "innehall_op_riksintressen_polygon",
@@ -247,10 +269,16 @@ class LoadPlanTests(PlanFileCase):
             for shape in re.findall(r"<se:WellKnownName>(.*?)</se:WellKnownName>", sld):
                 self.assertIn(shape, ("circle", "square", "triangle", "star", "cross"), table)
             self.assertEqual(list(context.errors()), [], table)
-        sld = self.layers["innehall_op_riksintressenop_polygon"].exportSldStyleV3(QgsSldExportContext()).toString()
+        sld = self.layers["innehall_op_markochvattenanvandning_polygon"].exportSldStyleV3(
+            QgsSldExportContext()).toString()
         self.assertIn("fill-opacity", sld)
         self.assertNotIn("<ogc:Function", sld)  # bara vanliga jämförelser i filtren
         self.assertIn("<se:ElseFilter", sld)  # klassen utan värde
+        sld = self.layers["innehall_op_riksintressenop_polygon"].exportSldStyleV3(QgsSldExportContext()).toString()
+        rules = re.sub(r"<se:TextSymbolizer>.*?</se:TextSymbolizer>", "", sld, flags=re.S)
+        self.assertNotIn("<ogc:Function", rules)  # bården i skalsteg: vanliga jämförelser och skalgränser
+        self.assertIn("<se:TextSymbolizer>", sld)  # etiketten (namn – värde) är ett uttryck
+        self.assertIn("<ogc:PropertyIsNull>", sld)  # regeln utan värde
         sld = self.layers["innehall_op_klimatrelateradrisk_polygon"].exportSldStyleV3(QgsSldExportContext()).toString()
         self.assertIn("stroke-dasharray", sld)
         points = self.layers["innehall_op_miljokvalitetsnormer_point"].exportSldStyleV3(QgsSldExportContext())

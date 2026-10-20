@@ -215,12 +215,11 @@ class ArrowDialogTests(PlanCase):
 
 
 class MapTests(PlanCase):
-    def test_land_use_covers_eighty_percent_with_a_thin_solid_edge(self):
+    def test_existing_land_use_covers_eighty_percent_without_an_edge(self):
         category = self.layers[MVA].renderer().categories()[0]
-        fill, edge = category.symbol().symbolLayer(0), category.symbol().symbolLayer(1)
-        self.assertEqual(fill.color().alpha(), styles.LAND_USE_ALPHA)
-        self.assertFalse(edge.useCustomDashPattern())
-        self.assertLessEqual(edge.width(), 0.25)
+        symbol = category.symbol()
+        self.assertEqual(symbol.symbolLayerCount(), 1)
+        self.assertEqual(symbol.symbolLayer(0).color().alpha(), styles.LAND_USE_ALPHA)
 
     def test_content_shows_its_name(self):
         for table in (MVA, UI + "line", "innehall_op_klimatrelateradrisk_point"):
@@ -245,6 +244,80 @@ class MapTests(PlanCase):
         self.assertIn("<se:TextSymbolizer>", text)
         self.assertIn("<se:MaxScaleDenominator>100000</se:MaxScaleDenominator>", text)
         self.assertIn('fill-opacity">0.8<', text)
+
+
+class RiksintressenMapTests(PlanCase):
+    POSITION = "innehall_op_riksintressenop_polygon"
+    SOURCE = "innehall_op_riksintressen_polygon"
+
+    def test_the_municipalitys_position_has_a_band_inside_the_edge_and_a_very_faint_fill(self):
+        renderer = self.layers[self.POSITION].renderer()
+        root = renderer.rootRule()
+        steps = root.children()[0].children()
+        self.assertEqual(len(steps), len(styles.BAND_STEPS))
+        symbol = steps[0].symbol()
+        fill, band, edge = symbol.symbolLayer(0), symbol.symbolLayer(1), symbol.symbolLayer(2)
+        self.assertEqual(fill.color().alpha(), styles.BAND_FILL_ALPHA)
+        self.assertGreater(band.offset(), 0)  # positiv förskjutning = innanför kanten
+        self.assertEqual(band.color().alpha(), styles.BAND_ALPHA)
+        self.assertAlmostEqual(band.offset() * 2, band.width())
+        self.assertEqual(edge.color().alpha(), 255)
+
+    def test_the_band_gets_narrower_further_out(self):
+        renderer = self.layers[self.POSITION].renderer()
+        root = renderer.rootRule()
+        steps = root.children()[0].children()
+        widths = [step.symbol().symbolLayer(1).width() for step in steps]
+        self.assertEqual(widths, sorted(widths, reverse=True))
+        self.assertEqual([(s.maximumScale(), s.minimumScale()) for s in steps],
+                         [(inner, outer) for inner, outer, _, _ in styles.BAND_STEPS])
+        self.assertEqual(root.children()[-1].filterExpression(), '"innehallstyp_varde" IS NULL')
+
+    def test_the_name_follows_the_edge_in_both_riksintresse_groups(self):
+        for table in (self.POSITION, self.SOURCE):
+            labeling = self.layers[table].labeling()
+            settings = labeling.settings()
+            self.assertEqual(settings.placement, Qgis.LabelPlacement.PerimeterCurved, table)
+            self.assertTrue(settings.isExpression, table)  # namn – vilket riksintresse
+
+    def test_the_riksintressen_have_the_band_and_their_dashed_edge(self):
+        renderer = self.layers[self.SOURCE].renderer()
+        root = renderer.rootRule()
+        steps = root.children()[0].children()
+        self.assertEqual(len(steps), len(styles.BAND_STEPS))
+        symbol = steps[0].symbol()
+        self.assertEqual(symbol.symbolLayer(0).color().alpha(), styles.BAND_FILL_ALPHA)
+        self.assertTrue(symbol.symbolLayer(2).useCustomDashPattern())
+
+    def test_the_plan_area_has_no_name_in_the_map(self):
+        self.assertFalse(self.layers["innehall_op_plangeometri"].labelsEnabled())
+
+    def test_the_label_says_which_riksintresse_it_is(self):
+        labeling = self.layers[self.POSITION].labeling()
+        settings = labeling.settings()
+        self.assertTrue(settings.isExpression)
+        expression = QgsExpression(settings.fieldName)
+        context = QgsExpressionContext()
+        for name, expected in (("Vänern", "Vänern – Turism och rörligt friluftsliv"),
+                               (None, "Turism och rörligt friluftsliv")):
+            feature = QgsFeature(self.layers[self.POSITION].fields())
+            feature["namn"] = name
+            feature["innehallstyp_varde"] = "Turism och rörligt friluftsliv"
+            context.setFeature(feature)
+            self.assertEqual(expression.evaluate(context), expected)
+
+    def test_every_overlay_area_has_the_band_and_its_name_along_the_edge(self):
+        layer = self.layers["innehall_op_klimatrelateradrisk_polygon"]
+        labeling = layer.labeling()
+        self.assertEqual(labeling.settings().placement, Qgis.LabelPlacement.PerimeterCurved)
+        self.assertEqual(labeling.settings().fieldName, "namn")
+        root = layer.renderer().rootRule()
+        self.assertEqual(len(root.children()[0].children()), len(styles.BAND_STEPS))
+
+    def test_the_band_reaches_the_sld_as_an_offset_line(self):
+        text = self.layers[self.POSITION].exportSldStyleV3(QgsSldExportContext()).toString()
+        self.assertIn("PerpendicularOffset", text)
+        self.assertIn("<se:MinScaleDenominator>150000</se:MinScaleDenominator>", text)
 
 
 class GeoServerTests(unittest.TestCase):

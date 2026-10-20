@@ -38,7 +38,13 @@ class AssignDialog(QDialog):
         self.precisering = QPlainTextEdit()
         self.precisering.setPlaceholderText("Kommunens precisering av innehållet (valfritt)")
         self.precisering.setFixedHeight(4 * self.precisering.fontMetrics().lineSpacing() + 14)
-        self.utbyggnadsordning = QLineEdit()
+        self.utbyggnadsordning = QComboBox()
+        self.utbyggnadsordning.setEditable(True)  # planens etapper, eller egen text
+        self.utbyggnadsordning.addItem("")
+        self.utbyggnadsordning.addItems(lookups.get("utbyggnadsordning", []))
+        self.utbyggnadsordning.lineEdit().setPlaceholderText("Ingen etapp (befintligt)")
+        self.utbyggnadsordning.setToolTip("Etappen i planens utbyggnadsordning (ställs in under Planens uppgifter, "
+                                          "fliken Utbyggnadsordning). Tom för befintlig eller bevarad användning.")
         self.riksintresse = QLineEdit()
         self.riksintresse.setPlaceholderText("Id hos den myndighet som pekat ut riksintresset (valfritt)")
         self.riksintresse.setToolTip("Riksintressets identitet i den ansvariga myndighetens data, till exempel "
@@ -165,7 +171,7 @@ class AssignDialog(QDialog):
                 combo.setCurrentIndex(index)
         self.namn.setText(str(current.get("namn") or ""))
         self.precisering.setPlainText(str(current.get("precisering") or ""))
-        self.utbyggnadsordning.setText(str(current.get("utbyggnadsordning") or ""))
+        self.utbyggnadsordning.setCurrentText(str(current.get("utbyggnadsordning") or ""))
         self.riksintresse.setText(str(current.get("objektidentitet_ri") or ""))
         chosen = {model.ARROW_END: (True, False), model.ARROW_START: (False, True), model.ARROW_BOTH: (True, True),
                   model.ARROW_NONE: (False, False)}.get(current.get(model.ARROW_FIELD))
@@ -187,7 +193,7 @@ class AssignDialog(QDialog):
         if self._has("precisering"):
             values["precisering"] = self.precisering.toPlainText().strip() or None
         if self._has("utbyggnadsordning"):
-            values["utbyggnadsordning"] = self.utbyggnadsordning.text().strip() or None
+            values["utbyggnadsordning"] = self.utbyggnadsordning.currentText().strip() or None
         if self._has("objektidentitet_ri"):
             values["objektidentitet_ri"] = self.riksintresse.text().strip() or None
         if self._has(model.ARROW_FIELD):

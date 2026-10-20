@@ -40,6 +40,10 @@ IMPORT_TIP = ("Importera geometri: kopierar ytor, linjer och punkter från ett a
               "Att tilldela, utan attribut")
 ASSIGN_TIP = ("Tilldela innehåll: klicka på en ritad yta, linje eller punkt och välj grupp och innehållstyp. "
               "Klicka på tilldelat innehåll för att byta typ.")
+TOPOGRAFI_TIP = ("Markanvändning från Topografi 10: gör om Lantmäteriets Topografi 10 eller Marktäcke (som du "
+                 "laddat ner från Geotorget) till befintlig mark- och vattenanvändning.")
+RIKSINTRESSEN_TIP = ("Hämta riksintressen: riksintressena enligt 3 och 4 kap. miljöbalken ur Boverkets karttjänst, "
+                     "som underlag i planen, och om du vill kommunens ställningstagande till dem.")
 HIDE_LABELS_TIP = ("Dölj texter: stänger tillfälligt av namnen på kartan så att de inte ligger i vägen när du ritar. "
                    "Klicka igen för att visa dem.")
 SHOW_LABELS_TIP = "Texterna är dolda. Klicka för att visa namnen på kartan igen."
@@ -85,6 +89,10 @@ class PlanToolBar(QToolBar):
                                               lambda s=suffix: h.draw(s), DRAW_TIPS[suffix])
                          for suffix in ("polygon", "line", "point")}
         self.act_import = self._action("import.svg", "Importera geometri", h.import_geometry, IMPORT_TIP)
+        self.act_riksintressen = self._action("riksintressen.svg", "Hämta riksintressen", h.fetch_riksintressen,
+                                              RIKSINTRESSEN_TIP)
+        self.act_topografi = self._action("topografi.svg", "Markanvändning från Topografi 10", h.open_topografi,
+                                          TOPOGRAFI_TIP)
         self.addSeparator()
         self.act_assign = self._toggle("assign.svg", "Tilldela innehåll", h.set_assigning, ASSIGN_TIP)
         self.act_copy = self._toggle("copy.svg", "Kopiera innehåll", h.set_copying, COPY_TIP)
@@ -97,7 +105,7 @@ class PlanToolBar(QToolBar):
         self.act_start.setEnabled(has_plan and not editing)
         self.act_stop.setEnabled(has_plan and editing)
         for action in (self.act_info, self.act_export, self.act_document, self.act_select, self.act_deselect,
-                       self.act_hide_labels):
+                       self.act_hide_labels, self.act_riksintressen, self.act_topografi):
             action.setEnabled(has_plan)
         for action in (*self.act_draw.values(), self.act_import, self.act_assign, self.act_copy, self.act_relate):
             action.setEnabled(has_plan and editing)

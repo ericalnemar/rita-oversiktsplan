@@ -5,6 +5,7 @@ tilldela*), och ger den sedan innehåll med verktyget *Tilldela innehåll*. Det 
 *Planens uppgifter*. *Avsluta redigering* (disketten) sparar eller förkastar ändringarna, som i Rita Detaljplan."""
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Optional
 
@@ -17,12 +18,15 @@ from qgis.PyQt.QtWidgets import QAction, QApplication, QFileDialog, QMenu, QMess
 from qgis.PyQt import sip
 
 from .core import (archive, checkout, content, editing, export_lm, geopackage, importer, model, relations, settings,
-                   sld, storage, underlag)
+                   kommunyta, riksintressen, sld, storage, underlag, utbyggnad)
 from .core import ngp_client as ngp
 from .core.project import (PlanError, active_plan_group, draft_layers, is_read_only, layer_in_group, load_plan,
                            plan_groups, plan_storage)
 from .gui.about_dialog import AboutDialog
+from .gui.andring_dialog import AndringDialog
 from .gui.archive_dialog import ArchiveDialog, build_archive
+from .gui.topografi_dialog import TopografiDialog
+from .gui.riksintressen_dialog import RiksintressenDialog, qgis_get
 from .gui.assign_dialog import AssignDialog
 from .gui.assign_tool import AssignTool
 from .gui.checkout_actions import CheckoutActions
@@ -79,6 +83,10 @@ class OversiktsplanPlugin:
         self._add_action("Öppna översiktsplan…", self.open_plan, icon("open.svg"))
         self._add_action("Importera geometri…", self.import_geometry, icon("import.svg"))
         self._add_action("Planens uppgifter…", self.open_info, icon("info.svg"))
+        self._add_action("Ändring av översiktsplanen…", self.open_andring)
+        self._add_action("Hämta riksintressen…", self.fetch_riksintressen)
+        self._add_action("Skapa kommunens ställningstagande för markerade riksintressen", self.create_positions)
+        self._add_action("Markanvändning från Topografi 10…", self.open_topografi, icon("topografi.svg"))
         self._add_action("Leverans och export…", self.export_plan, icon("export.svg"))
         self._add_action("Skapa arkivpaket…", self.open_archive)
         self._add_action("Kontrollera arkivpaket…", self.verify_archive)
@@ -152,20 +160,21 @@ class OversiktsplanPlugin:
         if qgz.exists() and not QgsProject.instance().fileName():
             self._warn(f"Det finns redan en projektfil som heter {qgz.name} i mappen. Välj ett annat filnamn.")
             return
+        plan, area_note = self._with_municipality_area(dialog.plan(), dialog.municipality_area.isChecked())
         if dialog.destination() == DATABASE:
             connection, schema, plan_id = dialog.database_target()
             try:
-                target = storage.create_postgis_plan(connection, schema, plan_id, dialog.plan())
+                target = storage.create_postgis_plan(connection, schema, plan_id, plan)
             except (storage.PostgisError, OSError, RuntimeError, ValueError) as exc:
                 self._warn(f"Kunde inte skapa översiktsplanen i databasen: {exc}")
                 return
             if self._load(target):
-                self._info(f"Skapade planen {plan_id} i schemat {schema}. Den är skrivskyddad i databasen: checka ut "
-                           "den för att rita." + self._save_project_file(qgz))
+                self._info(f"Skapade planen {plan_id} i schemat {schema}.{area_note} Den är skrivskyddad i databasen: "
+                           "checka ut den för att rita." + self._save_project_file(qgz))
             return
         target = dialog.target()
         try:
-            geopackage.create_geopackage(target, dialog.plan())
+            geopackage.create_geopackage(target, plan)
         except FileExistsError:
             self._warn(f"Det finns redan en fil som heter {target.name} i mappen. Välj ett annat filnamn.")
             return
@@ -173,8 +182,23 @@ class OversiktsplanPlugin:
             self._warn(f"Kunde inte skapa översiktsplanen: {exc}")
             return
         if self._load(target):
-            self._info(f"Skapade {target.name}. Rita en yta, linje eller punkt och ge den innehåll med Tilldela "
-                       "innehåll." + self._save_project_file(qgz))
+            self._info(f"Skapade {target.name}.{area_note} Rita en yta, linje eller punkt och ge den innehåll med "
+                       "Tilldela innehåll." + self._save_project_file(qgz))
+
+    def _with_municipality_area(self, plan: geopackage.NewPlan, wanted: bool) -> tuple[geopackage.NewPlan, str]:
+        """Planen med kommunens yta som plangeometri (om den önskas och går att hämta), och en mening om vad som
+        hände. Går den inte att hämta skapas planen ändå, utan plangeometri."""
+        if not wanted:
+            return plan, ""
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            shapes = kommunyta.fetch_municipality(qgis_get, plan.kommunkod, plan.epsg)
+        except (riksintressen.FetchError, ValueError, OSError) as exc:
+            self._warn(f"Kunde inte hämta kommunens yta: {exc} Planen skapas utan plangeometri; rita den själv.")
+            return plan, " Kommunens yta kunde inte hämtas, så plangeometrin saknas."
+        finally:
+            QApplication.restoreOverrideCursor()
+        return dataclasses.replace(plan, plan_area=tuple(shapes)), " Kommunens yta är plangeometri."
 
     def open_plan(self):
         """Öppnar en plan från en fil, eller (om QGIS har PostgreSQL-anslutningar) från en databas."""
@@ -302,19 +326,115 @@ class OversiktsplanPlugin:
         except ValueError as exc:
             self._warn(str(exc))
             return
+        stages = utbyggnad.read(group)
         dialog = PlanInfoDialog(info, events, self.iface.mainWindow(), current,
-                                plan_storage(group).read_lookup(model.UNDERLAGSTYP_LOOKUP))
+                                plan_storage(group).read_lookup(model.UNDERLAGSTYP_LOOKUP), stages)
         if not dialog.exec():
             return
         try:
             changed = content.write_plan_info(group, dialog.plan_info(), dialog.update_content.isChecked())
             if dialog.underlag() != current:
                 underlag.save_underlag(group, dialog.underlag())
+            new_stages = dialog.stages()
+            if [stage for _, stage in new_stages] != stages:
+                utbyggnad.write(group, [stage for _, stage in new_stages])
+                utbyggnad.rename_in_plan(group, utbyggnad.renames(stages, new_stages))
+                utbyggnad.refresh(group)
         except ValueError as exc:
             self._warn(str(exc))
             return
         group.setName(f"Översiktsplan – {dialog.plan_info().titel or plan_storage(group).name}")
         self._info("Sparade planens uppgifter." + (f" {changed} objekt fick planens planhändelse." if changed else ""))
+
+    def open_andring(self) -> Optional[AndringDialog]:
+        """Ändring av översiktsplanen: påbörja, sköta och anta en ändring (se ``core.andring``)."""
+        group = self._group()
+        if group is None or not self._editable(group):
+            return None
+        dialog = AndringDialog(group, plan_storage(group).read_lookup(model.PLANHANDELSE_LOOKUP),
+                               self.iface.mainWindow())
+        dialog.exec()
+        self.refresh_tools()
+        return dialog
+
+    def _plan_area(self, group):
+        """Planens avgränsning: plangeometrins ytor sammanslagna, eller None."""
+        return kommunyta.plan_area(group)
+
+    def _map_extent(self, group):
+        """Kartans utsnitt i planens koordinatsystem."""
+        from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform
+        canvas = self.iface.mapCanvas()
+        target = QgsCoordinateReferenceSystem(f"EPSG:{plan_storage(group).epsg}")
+        transform = QgsCoordinateTransform(canvas.mapSettings().destinationCrs(), target, QgsProject.instance())
+        return transform.transformBoundingBox(canvas.extent())
+
+    def fetch_riksintressen(self) -> Optional[RiksintressenDialog]:
+        """Hämta riksintressen ur Boverkets tjänst som underlag i planen (se ``core.riksintressen``)."""
+        group = self._group()
+        if group is None or not self._editable(group):
+            return None
+        if not editing.is_editing(group) and not self.start_editing():
+            return None
+        dialog = RiksintressenDialog(group, plan_storage(group).epsg, self._plan_area(group), self._map_extent(group),
+                                     self.iface.mainWindow())
+        dialog.exec()
+        if dialog.added:
+            self._info(f"Lade in {sum(dialog.added.values())} riksintressen som underlag. Spara med Avsluta "
+                       "redigering (disketten).")
+        return dialog
+
+    def open_topografi(self) -> Optional[TopografiDialog]:
+        """Befintlig mark- och vattenanvändning ur Lantmäteriets Topografi 10 eller Marktäcke (se ``core.topografi``)."""
+        from qgis.core import QgsCoordinateReferenceSystem
+        group = self._group()
+        if group is None:
+            self._warn("Ingen översiktsplan är öppen.")
+            return None
+        if not self._editable(group):
+            return None
+        if not editing.is_editing(group) and not self.start_editing():
+            return None
+        land_use = next(c for c in model.CATEGORIES if c.key == "markochvattenanvandning")
+        lookup = next(l for l in model.LOOKUPS if l.name == land_use.lookup)
+        storage_ = plan_storage(group)
+        dialog = TopografiDialog(group, storage_.read_lookup(lookup),
+                                 QgsCoordinateReferenceSystem(f"EPSG:{storage_.epsg}"), self._plan_area(group),
+                                 self.iface.mainWindow())
+        dialog.exec()
+        if dialog.outcome is not None:
+            self._info("Skapade befintlig mark- och vattenanvändning från Lantmäteriet. Spara med Avsluta "
+                       "redigering (disketten).")
+        self.refresh_tools()
+        return dialog
+
+    def create_positions(self) -> int:
+        """Kopierar de markerade hämtade riksintressena till Riksintresse, kommunens ställningstagande (se
+        ``core.riksintressen.create_positions``). Returnerar antalet nya ställningstaganden."""
+        group = self._group()
+        if group is None:
+            self._warn("Ingen översiktsplan är öppen.")
+            return 0
+        sources = riksintressen.selected_sources(group)
+        if not sources:
+            self._warn("Markera först de riksintressen kommunen tar ställning till, med verktyget Markera, i gruppen "
+                       "Riksintressen enligt 3 och 4 kap. MB.")
+            return 0
+        if not self._editable(group):
+            return 0
+        if not editing.is_editing(group) and not self.start_editing():
+            return 0
+        try:
+            added = sum(riksintressen.create_positions(group, sources).values())
+        except ValueError as exc:
+            self._warn(str(exc))
+            return 0
+        skipped = len(sources) - added
+        self._info(f"Skapade {added} ställningstaganden i Riksintresse, kommunens ställningstagande"
+                   + (f"; {skipped} riksintressen hade redan ett." if skipped else ".")
+                   + " Justera gränserna vid behov och spara med Avsluta redigering (disketten).")
+        self.refresh_tools()
+        return added
 
     def export_plan(self) -> Optional[ExportDialog]:
         """Leverans och export: kontrollerar planen och sparar, levererar eller arkiverar den. Planen läses med osparade
@@ -905,6 +1025,7 @@ class OversiktsplanPlugin:
             feature = candidate.layer.getFeature(candidate.fid)
             current = {name: content.plain(feature[name]) for name in content.CONTENT_FIELDS
                        if feature.fields().indexOf(name) >= 0}
+        lookups[utbyggnad.KEY] = [stage.label for stage in utbyggnad.read(group)]
         dialog = AssignDialog(candidate.suffix, lookups, current, candidate.category, self.iface.mainWindow())
         accepted = dialog.exec()
         if self.assign_tool is not None:

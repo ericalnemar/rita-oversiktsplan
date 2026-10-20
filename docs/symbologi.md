@@ -58,12 +58,12 @@ rött för ras. Testerna kontrollerar att ingen grupp har samma kant eller samma
 
 | Grupp | Kant och linje | Punkt |
 |---|---|---|
-| Mark- och vattenanvändning | tunn heldragen kant runt färg som täcker till 80 % | fylld cirkel |
-| Plangeometri | kraftig streck-prick, ingen fyllning | – |
+| Mark- och vattenanvändning | färg som täcker till 80 %, ingen kant (i en etapp: kraftig streckad kant) | fylld cirkel |
+| Plangeometri | kraftig streck-prick, ingen fyllning, inget namn | – |
 | Område | tät prickad, ingen fyllning | – |
 | Utvecklingsinriktning | mjuk kant; linjer som breda band med pilspets | ring kring en prick |
 | Riksintresse, kommunens ställningstagande | heldragen | triangel |
-| Riksintressen enligt 3 och 4 kap. MB (underlag) | tunn streckad, ingen fyllning | ihålig triangel |
+| Riksintressen enligt 3 och 4 kap. MB (underlag) | tunn streckad | ihålig triangel |
 | Miljökvalitetsnormer | tät prickad | romb |
 | Övriga förhållanden av väsentlig betydelse | streck-prick-prick | ihålig romb |
 | Bostadsförsörjning | streck-prick | kvadrat |
@@ -77,44 +77,65 @@ rött för ras. Testerna kontrollerar att ingen grupp har samma kant eller samma
 | Länsstyrelsens invändningar | kraftig streck-prick-prick | cirkel med vit ring |
 
 Kommunens ställningstagande till ett riksintresse och samma riksintresse enligt miljöbalken har samma färg och samma
-punktform (triangel). Underlaget är ihåligt och utan fyllning, ställningstagandet fyllt och med heldragen kant.
+punktform (triangel). Underlaget har tunn streckad kant och ihålig punkt, ställningstagandet heldragen kant. Båda har en mycket svag fyllning
+(cirka 8 %), så att man ser var riksintresset gäller, och en bred halvgenomskinlig bård längs insidan av kanten, och namnet står längs kanten, som i många tryckta
+översiktsplaner. Riksintressena är ofta stora och överlappar varandra: med den tidigare, starkare fyllningen blandades färgerna där de låg på
+varandra och kartan blev grumlig, och namnet stod två gånger när både riksintresset och ställningstagandet syntes.
+Nu syns markanvändningen inuti, varje gräns syns var för sig och namnet står en gång.
+
+Bården blir smalare när man zoomar ut, i tre steg, så att den inte kladdar ihop längs flikiga kuster och sjöar:
+
+| Skala | Bård | Kant |
+|---|---|---|
+| inzoomad, till 1:50 000 | 2,4 mm | 0,5 mm |
+| kommunkartan, 1:50 000–1:150 000 | 1,2 mm | 0,4 mm |
+| län och region, utzoomad förbi 1:150 000 | 0,6 mm | 0,3 mm |
+
+Stegen är skalregler i stället för en fast referensskala, eftersom skalreglerna följer med till GeoServer (SLD) och en
+referensskala inte gör det. Vill du se namnen på underlaget
+(till exempel innan du skapat några ställningstaganden) slår du på etiketterna under lagrets egenskaper.
 
 Mark- och vattenanvändningen är grunden och skiljs åt med färgen. Färgskillnaden mäts med CIEDE2000 (ΔE00), ett
 standardmått på hur olika två färger ser ut för ögat, och testerna kontrollerar att alla par ligger på minst 8,5.
 
 ## Mark- och vattenanvändning
 
-Grunden i kartan. Färgen täcker till 80 procent, så att bakgrundskartan anas, och kanten är tunn och mörkare. Färgerna utgår från Boverkets färger för detaljplanens användningsområden, med samma färgkoder som i
-Rita Detaljplan. Där detaljplanens egna färger ligger för nära varandra, eller detaljplanen saknar motsvarighet, har
-värdet fått en egen färg i samma färgfamilj. Till exempel är T (grå) i detaljplanen nästan samma som GATA (ljusgrå),
-så *Järnväg* har fått en mörkare grå.
+Grunden i kartan. Färgen täcker till 80 procent, så att bakgrundskartan anas, och befintlig användning har ingen kant. Där det finns ett
+motsvarande markslag i Lantmäteriets **Topografi 10** har användningen markslagets färg ur Lantmäteriets stilfil för
+QGIS, så att befintlig användning ser ut som Lantmäteriets karta (och som det verktyget *Markanvändning från
+Topografi 10* skapar). Övriga värden utgår från Boverkets färger för detaljplanens användningsområden, med samma
+färgkoder som i Rita Detaljplan; där de ligger för nära varandra har värdet fått en egen färg i samma färgfamilj.
 
-| Innehållstyp | Färg | Detaljplanens färg |
+**Utbyggnadsordning:** har planen etapper (Planens uppgifter, fliken Utbyggnadsordning) ritas mark- och
+vattenanvändning i en etapp med kraftig streckad kant i en mörk ton, och färgen går från mättad och något mörkare
+(första etappen) till ljus (sista etappen), i samma färgton. Ytor utan etapp ritas som ovan. (Att bara göra färgen
+mörkare gjorde gult till oliv, som såg ut som en annan användning.) Etappen står under namnet i kartan.
+
+| Innehållstyp | Färg | Ursprung |
 |---|---|---|
-| Bostadsbebyggelse | gul | B, oförändrad |
-| Funktionsblandad bebyggelse | mörkare brun | (C är brun men för nära Z) |
-| Service | röd | S, D, oförändrad |
-| Verksamheter | beige | Z, oförändrad |
-| Teknisk infrastruktur | gråblå | (E är blågrå men för nära W) |
+| Bostadsbebyggelse | ljust gulbrun | Topografi 10: Låg bebyggelse |
+| Funktionsblandad bebyggelse | brunorange | Topografi 10: Sluten bebyggelse |
+| Service | röd | detaljplan S, D |
+| Verksamheter | ljusgrå | Topografi 10: Industri- och handelsbebyggelse |
+| Teknisk infrastruktur | gråblå | (detaljplanens E är blågrå men för nära W) |
 | Energiproduktion | blåviolett | – |
-| Vägtrafik | ljusgrå | GATA, VÄG, oförändrad |
-| Järnväg | mörkare grå | (T är grå men för nära GATA) |
+| Vägtrafik | mellangrå; vägar som linje ljusgrå | (GATA:s ljusgrå låg för nära Topografi 10:s industrigrå) |
+| Järnväg | mörkare grå | (detaljplanens T är grå men för nära GATA) |
 | Luftfart | ljuslila | – |
 | Sjöfart | marinblå | – |
-| Vatten | ljusblå | W, oförändrad |
+| Vatten | ljusblå | Topografi 10: Sjö, hav och vattendrag |
 | Fiske | klarblå | – |
 | Vattenbruk | blågrön | – |
-| Grönområde | ljusgrön | PARK, oförändrad |
-| Natur- och kulturlandskap | mellangrön | (NATUR är samma ljusgröna som PARK) |
+| Grönområde | ljust blågrön | nära Topografi 10:s idrottsplaner (som låg för nära skogen) |
+| Natur- och kulturlandskap | nästan vit, gulaktig | Topografi 10: Öppen mark |
 | Landsbygd | gråbeige | – |
-| Friluftsliv och rekreation | grön | N, oförändrad |
-| Jordbruk | sädesgul | (L är samma gröna som N) |
-| Skogsbruk | mörkgrön | – |
+| Friluftsliv och rekreation | grön | detaljplan N |
+| Jordbruk | ljusgul | Topografi 10: Åker |
+| Skogsbruk | ljusgrön | Topografi 10: Barr- och blandskog |
 | Renskötsel | grågrön | – |
 | Annan mark- och vattenanvändning | rosa | – |
 
-De två som ligger närmast varandra är *Bostadsbebyggelse* och *Grönområde* (ΔE00 8,9). Där har detaljplanens färger
-behållits, eftersom de är grunden i schemat.
+De två som ligger närmast varandra är *Vägtrafik* och *Landsbygd* (ΔE00 9,0). Topografi 10:s ljusaste färger (öppen mark, industrigrå) syns svagt mot vit bakgrund, som i Lantmäteriets egen karta.
 
 Valen är tolkningar. Till exempel kunde *Service* ha fått detaljplanens färg för C (centrum). Säg till om en annan
 motsvarighet passar bättre.
@@ -160,9 +181,20 @@ under lagrets egenskaper → Visning (*Skalberoende synlighet*).
 
 ## Övrigt innehåll (överlägg)
 
-Övrigt innehåll ligger ovanpå markanvändningen: gruppens kant i värdets färg, och en svag fyllning (cirka 18 %
-täckning). Markanvändningen syns igenom, och innehåll får överlagra varandra enligt Boverket. Några grupper ritas
-utan fyllning och med ihåliga punkter: underlaget (riksintressen enligt miljöbalken) och några grupper med ett enda
+Övrigt innehåll ligger ovanpå markanvändningen. **Ytorna** ritas alla på samma sätt, som kommunens ställningstagande
+till riksintressena:
+
+- gruppens kant (strecktypen och tjockleken i tabellen ovan) i värdets färg,
+- en bred halvgenomskinlig **bård på insidan av kanten**, som blir smalare när man zoomar ut (se skalstegen ovan),
+- en **mycket svag fyllning** (cirka 8 %), så att man ser var innehållet gäller,
+- **namnet längs kanten**, i bården.
+
+Markanvändningen syns igenom, och innehåll får överlagra varandra enligt Boverket utan att kartan blir grumlig.
+Undantagen är markanvändningen (heltäckande färg, egen stil), utvecklingsinriktningen (eget schema),
+och plangeometrin och områden (bara en gräns; plangeometrin visar inget namn). För riksintressena, både underlaget och
+kommunens ställningstagande, säger namnet också vilket riksintresse det är, till exempel *Vänern – Turism och rörligt
+friluftsliv*. Finns både underlaget och ställningstagandet för samma riksintresse står namnet två gånger; släck då
+det ena lagret. Några grupper har ihåliga punkter: underlaget och några grupper med ett enda
 värde, för att de ska få en egen punktform.
 
 | Grupp | Färger per värde |
@@ -175,7 +207,7 @@ värde, för att de ska få en egen punktform.
 | Övriga grupper med ett värde | en egen färg |
 | Plangeometri | svart |
 
-**Att tänka på:** där ett genomskinligt överlägg ligger på en markanvändning blandas färgerna. Det är kanten som
+**Att tänka på:** där överlägg ligger på en markanvändning blandas färgerna något. Det är kanten och bården som
 visar vilket överlägg det är: strecktypen säger gruppen och färgen värdet. Inom en grupp med många värden, som de 23
 riksintressena, är färgerna i samma tema ganska lika; använd identifieringsverktyget när du är osäker.
 

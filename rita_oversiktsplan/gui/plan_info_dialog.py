@@ -1,5 +1,5 @@
-"""Dialogen "Planens uppgifter", med flikarna Planen, Planhändelse, Beslut, Underlag och Standardvärden för nytt
-innehåll.
+"""Dialogen "Planens uppgifter", med flikarna Planen, Planhändelse, Beslut, Underlag, Utbyggnadsordning och
+Standardvärden för nytt innehåll.
 
 Det som gäller hela planen ställs in här i stället för på varje objekt: planhändelsen följer med allt innehåll, och
 standardvärdena (vertikal avgränsning, under ersättning …) sätts på varje objekt som tilldelas innehåll. Värden som
@@ -18,6 +18,7 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDateE
 from ..core import model
 from ..core.content import Decision, PlanInfo
 from ..core.underlag import Underlag
+from ..core.utbyggnad import Stage
 
 NONE = "– ingen än –"
 NO_LIMIT = "Ingen vertikal avgränsning"
@@ -59,7 +60,7 @@ def _form(page: QWidget) -> QFormLayout:
 
 class PlanInfoDialog(QDialog):
     def __init__(self, info: PlanInfo, planhandelser: list[str], parent=None, underlag: list[Underlag] | None = None,
-                 underlagstyper: list[str] | None = None):
+                 underlagstyper: list[str] | None = None, stages: list[Stage] | None = None):
         super().__init__(parent)
         self.info = info
         self.setWindowTitle("Planens uppgifter")
@@ -72,6 +73,7 @@ class PlanInfoDialog(QDialog):
         self.underlag_tab = self._underlag_tab(underlag or []) if self.underlagstyper else None
         if self.underlag_tab is not None:
             self.tabs.addTab(self.underlag_tab, "Underlag")
+        self.tabs.addTab(self._stages_tab(list(stages or [])), "Utbyggnadsordning")
         self.tabs.addTab(self._defaults_tab(info), "Standardvärden för innehåll")
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -135,8 +137,8 @@ class PlanInfoDialog(QDialog):
         self.laga_kraft = OptionalDate("Datum", decision.laga_kraft)
         note = QLabel("Antagandebeslutet. Boverkets föreskrifter (BFS 2024:2, 2 kap. 2 §) kräver att översiktsplanen "
                       "redovisar antagandebeslutets diarienummer och datum när beslutet fick laga kraft. Fyll i dem "
-                      "när planen är antagen. Beslutet gäller planen och allt innehåll som inte redan hör till ett "
-                      "annat beslut.")
+                      "när planen är antagen. Antagandebeslutet gäller planen som helhet; en ändring av planen får "
+                      "ett eget beslut (Insticksprogram → Rita Översiktsplan → Ändring av översiktsplanen).")
         note.setWordWrap(True)
         note.setEnabled(False)
         page = QWidget()
@@ -215,6 +217,90 @@ class PlanInfoDialog(QDialog):
         layout.addLayout(buttons)
         layout.addWidget(note)
         return page
+
+    def _stages_tab(self, stages: list[Stage]) -> QWidget:
+        """Planens etapper i utbyggnadsordningen: namn och tidsperiod, i den ordning de ska byggas ut."""
+        self.stage_table = QTableWidget(0, 2)
+        self.stage_table.setHorizontalHeaderLabels(["Etapp", "Tidsperiod"])
+        self.stage_table.verticalHeader().hide()
+        self.stage_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.stage_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        header = self.stage_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for index, stage in enumerate(stages):
+            self.add_stage(stage, index)
+        add = QPushButton("Lägg till")
+        add.clicked.connect(lambda: self.add_stage())
+        remove = QPushButton("Ta bort")
+        remove.clicked.connect(self.remove_stage)
+        up = QPushButton("Flytta upp")
+        up.clicked.connect(lambda: self.move_stage(-1))
+        down = QPushButton("Flytta ned")
+        down.clicked.connect(lambda: self.move_stage(1))
+        buttons = QHBoxLayout()
+        for button in (add, remove, up, down):
+            buttons.addWidget(button)
+        buttons.addStretch(1)
+        note = QLabel("Etapperna i den ordning planen ska byggas ut, till exempel Etapp 1 med perioden 2027–2035. De "
+                      "går sedan att välja som utbyggnadsordning för mark- och vattenanvändning och "
+                      "utvecklingsinriktning. I kartan ritas mark- och vattenanvändningen i en etapp med streckad kant "
+                      "och en ton från mörk (första etappen) till ljus (sista); utan etapp är den befintlig och ritas "
+                      "som förut. Byter du namn eller period på en etapp får objekten den nya texten. Tar du bort en "
+                      "etapp behåller objekten sin text men ritas som befintliga.")
+        note.setWordWrap(True)
+        note.setEnabled(False)
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.addWidget(self.stage_table, 1)
+        layout.addLayout(buttons)
+        layout.addWidget(note)
+        return page
+
+    def add_stage(self, stage: Optional[Stage] = None, original: Optional[int] = None) -> int:
+        """Lägger till en rad; ``original`` är etappens plats i den sparade listan (None för en ny etapp)."""
+        table = self.stage_table
+        row = table.rowCount()
+        table.insertRow(row)
+        name = QTableWidgetItem(stage.namn if stage else f"Etapp {row + 1}")
+        name.setData(Qt.ItemDataRole.UserRole, original)
+        table.setItem(row, 0, name)
+        table.setItem(row, 1, QTableWidgetItem(stage.period if stage else ""))
+        if stage is None:
+            table.setCurrentCell(row, 1)
+            table.editItem(table.item(row, 1))
+        return row
+
+    def remove_stage(self) -> None:
+        row = self.stage_table.currentRow()
+        if row >= 0:
+            self.stage_table.removeRow(row)
+
+    def move_stage(self, step: int) -> None:
+        table = self.stage_table
+        row = table.currentRow()
+        other = row + step
+        if row < 0 or not 0 <= other < table.rowCount():
+            return
+        for column in (0, 1):
+            a, b = table.takeItem(row, column), table.takeItem(other, column)
+            table.setItem(row, column, b)
+            table.setItem(other, column, a)
+        table.setCurrentCell(other, 0)
+
+    def stages(self) -> list[tuple[Optional[int], Stage]]:
+        """Etapperna i fliken, i ordning: (plats i den sparade listan eller None, etappen). Rader utan namn räknas
+        inte."""
+        result = []
+        table = self.stage_table
+        for row in range(table.rowCount()):
+            name = table.item(row, 0)
+            text = name.text().strip() if name else ""
+            if not text:
+                continue
+            period = table.item(row, 1).text().strip() if table.item(row, 1) else ""
+            result.append((name.data(Qt.ItemDataRole.UserRole), Stage(text, period)))
+        return result
 
     def add_underlag(self, item: Optional[Underlag] = None) -> int:
         """Lägger till en rad (tom eller med ``item``). Returnerar radens nummer."""
