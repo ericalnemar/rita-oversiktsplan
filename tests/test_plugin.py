@@ -217,6 +217,40 @@ def choose(group_key, value, **fields):
     return exec_
 
 
+class PlanAreaPickTests(unittest.TestCase):
+    """Plangeometrin täcker hela planen: den väljs bara på sin kant, inte när man klickar eller drar inne i planen."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+        self.project = QgsProject.instance()
+        self.project.clear()
+        self.addCleanup(self.project.clear)
+        path = geopackage.create_geopackage(Path(self.tmp.name) / "op.gpkg", geopackage.NewPlan(
+            "1494", "Lidköping", "ÖP", datetime.date(2027, 1, 1),
+            plan_area=({"type": "Polygon", "coordinates": [[[0, 0], [1000, 0], [1000, 1000], [0, 1000], [0, 0]]]},)))
+        self.layers = load_plan(path, self.project)
+        self.group = active_plan_group(self.project)
+
+    def picked(self, x, y):
+        return [c.layer.name() for c in content.candidates_at(self.group, QgsPointXY(x, y), 5.0)]
+
+    def test_a_click_inside_the_plan_does_not_offer_the_plan_area(self):
+        self.assertNotIn("Plangeometri", self.picked(500, 500))
+
+    def test_a_click_on_the_edge_does(self):
+        self.assertIn("Plangeometri", self.picked(1002, 500))
+
+    def test_a_rectangle_inside_the_plan_leaves_it_alone_but_one_over_the_edge_selects_it(self):
+        from rita_oversiktsplan.core import editing
+        from qgis.core import QgsRectangle
+        plan = self.layers["innehall_op_plangeometri"]
+        editing.select_in_rect(self.group, QgsRectangle(100, 100, 900, 900))
+        self.assertEqual(plan.selectedFeatureCount(), 0)
+        editing.select_in_rect(self.group, QgsRectangle(900, 100, 1100, 900))
+        self.assertEqual(plan.selectedFeatureCount(), 1)
+
+
 class PlanCommandTests(unittest.TestCase):
     """Rita först, tilldela sedan, Planens uppgifter och Spara, med en riktig plan i kartan."""
 

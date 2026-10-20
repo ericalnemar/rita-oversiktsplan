@@ -110,6 +110,9 @@ _UTBYGGNADSORDNING = FieldDef("utbyggnadsordning", TEXT, "Utbyggnadsordning", mu
 _SAMBANDSNIVA = FieldDef("sambandsniva_varde", TEXT, "Sambandsnivå", lookup=SAMBANDSNIVA_LOOKUP.name)
 _RI = FieldDef("objektidentitet_ri", TEXT, "Riksintressets objektidentitet", length=38)
 
+PLAN_AREA_KEY = "plangeometri"
+PLAN_AREA_ALIAS = "Plangeometri"  # lagrets namn i lagerpanelen
+
 CATEGORIES: tuple[Category, ...] = (
     Category("plangeometri", "Plangeometri", "Plangeometri", polygon_only=True),
     Category("omrade", "Område", "Område", polygon_only=True),

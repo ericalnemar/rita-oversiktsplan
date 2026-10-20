@@ -73,8 +73,13 @@ def candidates_at(group, point: QgsPointXY, tolerance: float) -> list[Candidate]
             geometry = feature.geometry()
             if geometry is None or geometry.isEmpty():
                 continue
-            hit = (geometry.contains(probe) if geometry.type() == QgsWkbTypes.GeometryType.PolygonGeometry
-                   else geometry.distance(probe) <= tolerance)
+            if category is not None and category.key == model.PLAN_AREA_KEY:
+                # plangeometrin täcker hela planen och ändras sällan: den väljs bara på sin kant, så att den inte
+                # kommer i vägen när man klickar på innehåll inne i planen
+                hit = QgsGeometry(geometry.constGet().boundary()).distance(probe) <= tolerance
+            else:
+                hit = (geometry.contains(probe) if geometry.type() == QgsWkbTypes.GeometryType.PolygonGeometry
+                       else geometry.distance(probe) <= tolerance)
             if hit:
                 found.append(Candidate(layer, feature.id(), suffix, category))
     return found

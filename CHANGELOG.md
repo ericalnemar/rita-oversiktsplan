@@ -4,6 +4,15 @@ Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/), versi
 
 ## Ej utgivet
 
+## [0.1.7] – okända värden syns, plangeometrin i vägen
+
+- **Objekt med ett värde som inte finns i planens lista ritas igen**, som *Innehållstyp ej vald* (orange). Sedan 0.1.5
+  syntes de inte alls i lager med regler (linjer, punkter, ytor med bård, markanvändning i etapper), till exempel
+  objekt som klistrats in från ett annat lager. Objekten fanns kvar i datan och i exporten.
+- **Plangeometrin kommer inte längre i vägen.** Den väljs bara när man klickar på dess kant, eller drar en rektangel
+  över kanten, inte när man klickar eller markerar inne i planen. Gäller Markera, Tilldela innehåll, Kopiera innehåll
+  och Berör annat innehåll.
+
 ## [0.1.6] – linjer och punkter i alla skalor
 
 - **Linjer och punkter syns i alla skalor.** Förut syntes de först från 1:25 000. Nu blir de i stället mindre i tre

@@ -178,6 +178,10 @@ Klicka på ett objekt (ligger flera på varandra väljer du i en meny) eller dra
 lägger till i markeringen, och högerklick avmarkerar allt. Objektets lager blir aktivt, så att QGIS egna verktyg
 (flytta, dela, brytpunkter) fungerar direkt på det. **Avmarkera alla** tar bort markeringen i planens lager.
 
+**Plangeometrin** täcker hela planen och kommer därför inte med när du klickar eller drar en rektangel inne i planen.
+Vill du ändra den klickar du på dess kant, eller drar en rektangel som går över kanten. Det gäller också *Tilldela
+innehåll*, *Kopiera innehåll* och *Berör annat innehåll*.
+
 **Kopiera innehåll** fungerar som *Kopiera bestämmelser* i Rita Detaljplan: klicka först på ett objekt med innehåll
 (det visas i grönt) och sedan på de objekt som ska få samma innehåll. Det som kopieras är grupp, innehållstyp,
 kompletterande innehållstyp, sambandsnivå, precisering och utbyggnadsordning, inte namnet. Målet kan vara otilldelad

@@ -287,7 +287,7 @@ class LoadPlanTests(PlanFileCase):
         rules = re.sub(r"<se:TextSymbolizer>.*?</se:TextSymbolizer>", "", sld, flags=re.S)
         self.assertNotIn("<ogc:Function", rules)  # bården i skalsteg: vanliga jämförelser och skalgränser
         self.assertIn("<se:TextSymbolizer>", sld)  # etiketten (namn – värde) är ett uttryck
-        self.assertIn("<ogc:PropertyIsNull>", sld)  # regeln utan värde
+        self.assertIn("<se:ElseFilter", sld)  # regeln utan värde fångar också okända värden
         sld = self.layers["innehall_op_klimatrelateradrisk_polygon"].exportSldStyleV3(QgsSldExportContext()).toString()
         self.assertIn("stroke-dasharray", sld)
         points = self.layers["innehall_op_miljokvalitetsnormer_point"].exportSldStyleV3(QgsSldExportContext())

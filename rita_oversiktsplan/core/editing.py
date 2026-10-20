@@ -83,8 +83,10 @@ def select_in_rect(group, rect: QgsRectangle, add: bool = False) -> int:
     for layer in geometry_layers(group):
         if not _visible(group, layer):
             continue
+        plan_area = layer.name() == model.PLAN_AREA_ALIAS  # bara om rektangeln går över planens kant
         ids = [f.id() for f in layer.getFeatures(QgsFeatureRequest().setFilterRect(rect).setNoAttributes())
-               if f.hasGeometry() and f.geometry().intersects(probe)]
+               if f.hasGeometry() and (QgsGeometry(f.geometry().constGet().boundary()) if plan_area
+                                       else f.geometry()).intersects(probe)]
         if ids:
             layer.select(ids)
             count += len(ids)

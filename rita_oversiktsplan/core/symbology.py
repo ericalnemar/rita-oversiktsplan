@@ -77,7 +77,7 @@ def apply_stages(layer: QgsVectorLayer, category: model.Category, lookups: dict[
     root = QgsRuleBasedRenderer.Rule(None)
     for value in [*lookups.get(category.lookup, []), None]:
         style = (styles.style_for(category.key, value) or FALLBACK) if value else Style(styles.UNASSIGNED_COLOR)
-        rule = QgsRuleBasedRenderer.Rule(None, 0, 0, _equals(field, value), value or UNASSIGNED_LABEL)
+        rule = QgsRuleBasedRenderer.Rule(None, 0, 0, _value_filter(field, value), value or UNASSIGNED_LABEL)
         rule.appendChild(QgsRuleBasedRenderer.Rule(symbol(style, group, layer.geometryType()), 0, 0, without,
                                                    "Ingen etapp (befintligt)"))
         for index, label in enumerate(labels):
@@ -123,7 +123,7 @@ def _apply_size_steps(layer: QgsVectorLayer, field: str, group: Group, key: str,
     root = QgsRuleBasedRenderer.Rule(None)
     for value in [*values, None]:
         style = (styles.style_for(key, value) or FALLBACK) if value else Style(styles.UNASSIGNED_COLOR)
-        rule = QgsRuleBasedRenderer.Rule(None, 0, 0, _equals(field, value), value or UNASSIGNED_LABEL)
+        rule = QgsRuleBasedRenderer.Rule(None, 0, 0, _value_filter(field, value), value or UNASSIGNED_LABEL)
         for inner, outer, factor in styles.SIZE_STEPS:
             # Rule(symbol, mest inzoomade skala, mest utzoomade skala, …)
             sized = _line(style, group, factor) if geometry == QgsWkbTypes.GeometryType.LineGeometry else \
@@ -140,7 +140,7 @@ def _apply_band_steps(layer: QgsVectorLayer, field: str, group: Group, key: str,
     root = QgsRuleBasedRenderer.Rule(None)
     for value in [*values, None]:
         style = (styles.style_for(key, value) or FALLBACK) if value else Style(styles.UNASSIGNED_COLOR)
-        rule = QgsRuleBasedRenderer.Rule(None, 0, 0, _equals(field, value), value or UNASSIGNED_LABEL)
+        rule = QgsRuleBasedRenderer.Rule(None, 0, 0, _value_filter(field, value), value or UNASSIGNED_LABEL)
         for inner, outer, band, edge in styles.BAND_STEPS:
             # Rule(symbol, mest inzoomade skala, mest utzoomade skala, …)
             label = f"bård {band:g} mm"
@@ -151,6 +151,13 @@ def _apply_band_steps(layer: QgsVectorLayer, field: str, group: Group, key: str,
 
 
 # -- utvecklingsinriktningen ------------------------------------------------------------------------------------------
+def _value_filter(field: str, value: Optional[str]) -> str:
+    """Filtret för ett värdes regel. Regeln utan värde är en ELSE-regel: den fångar också objekt vars värde inte finns
+    i planens lista (t.ex. inklistrade från ett annat lager), så att de ritas som "innehållstyp ej vald" i stället för
+    att inte synas alls. I SLD blir den ett ElseFilter."""
+    return "ELSE" if value is None else _equals(field, value)
+
+
 def _equals(field: str, value: Optional[str]) -> str:
     quoted = QgsExpression.quotedColumnRef(field)
     return f"{quoted} IS NULL" if value is None else f"{quoted} = {QgsExpression.quotedValue(value)}"

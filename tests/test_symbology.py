@@ -20,7 +20,7 @@ from qgis.core import (Qgis, QgsExpression, QgsExpressionContext, QgsFeature, Qg
                        QgsRuleBasedRenderer, QgsSldExportContext)
 
 from rita_oversiktsplan import classFactory  # noqa: E402
-from rita_oversiktsplan.core import geopackage, project, sld, styles, symbology  # noqa: E402
+from rita_oversiktsplan.core import geopackage, model, project, sld, styles, symbology  # noqa: E402
 from test_plugin import FakeIface  # noqa: E402
 
 PLAN = geopackage.NewPlan("0484", "Eskilstuna", "ÖP 2040", datetime.date(2027, 1, 1))
@@ -280,7 +280,7 @@ class RiksintressenMapTests(PlanCase):
         self.assertEqual(widths, sorted(widths, reverse=True))
         self.assertEqual([(s.maximumScale(), s.minimumScale()) for s in steps],
                          [(inner, outer) for inner, outer, _, _ in styles.BAND_STEPS])
-        self.assertEqual(root.children()[-1].filterExpression(), '"innehallstyp_varde" IS NULL')
+        self.assertTrue(root.children()[-1].isElse())
 
     def test_the_name_follows_the_edge_in_both_riksintresse_groups(self):
         for table in (self.POSITION, self.SOURCE):
@@ -327,6 +327,61 @@ class RiksintressenMapTests(PlanCase):
         text = self.layers[self.POSITION].exportSldStyleV3(QgsSldExportContext()).toString()
         self.assertIn("PerpendicularOffset", text)
         self.assertIn("<se:MinScaleDenominator>150000</se:MinScaleDenominator>", text)
+
+
+class UnknownValueTests(PlanCase):
+    """Ett objekt vars värde inte finns i planens lista (t.ex. inklistrat från ett annat lager) ska ritas som
+    "innehållstyp ej vald", inte försvinna. Den klassade renderaren gjorde så; reglerna gjorde det inte i 0.1.5–0.1.6.
+    Testet ritar på riktigt: QGIS symbolsForFeature räknar alltid med ELSE-regeln, det gör inte ritningen."""
+
+    def image(self, table, value, wkt):
+        from qgis.core import (QgsGeometry, QgsMapRendererSequentialJob, QgsMapSettings, QgsRectangle,
+                               QgsVectorLayer)
+        from qgis.PyQt.QtCore import QSize
+        from qgis.PyQt.QtGui import QColor
+        source = self.layers[table]
+        kind = {"point": "Point", "line": "MultiLineString", "polygon": "MultiPolygon"}[table.rsplit("_", 1)[1]]
+        layer = QgsVectorLayer(f"{kind}?crs=EPSG:3006&field=innehallstyp_varde:string", "prov", "memory")
+        feature = QgsFeature(layer.fields())
+        feature["innehallstyp_varde"] = value
+        feature.setGeometry(QgsGeometry.fromWkt(wkt))
+        layer.dataProvider().addFeature(feature)
+        layer.setRenderer(source.renderer().clone())
+        settings = QgsMapSettings()
+        settings.setLayers([layer])
+        settings.setDestinationCrs(layer.crs())
+        settings.setOutputSize(QSize(60, 60))
+        settings.setExtent(QgsRectangle(0, 0, 100, 100))  # ca 1:6 000: det inzoomade steget
+        settings.setBackgroundColor(QColor(255, 255, 255))
+        job = QgsMapRendererSequentialJob(settings)
+        job.start()
+        job.waitForFinished()
+        picture = job.renderedImage()
+        return [picture.pixel(x, y) for x in range(60) for y in range(60)]
+
+    def assert_drawn_like_not_chosen(self, table, wkt):
+        known, unknown, empty = (self.image(table, v, wkt) for v in ("Risk för ras", "Okänt värde", None))
+        blank = [0xFFFFFFFF] * len(empty)
+        self.assertNotEqual(empty, blank, table)  # utan värde: ritas
+        self.assertEqual(unknown, empty, table)  # okänt värde: som utan värde
+        self.assertNotEqual(known, empty, table)  # känt värde: sin egen symbol
+
+    def test_points_lines_and_banded_areas_with_an_unknown_value_are_still_drawn(self):
+        for table, wkt in (("innehall_op_klimatrelateradrisk_point", "POINT(50 50)"),
+                           ("innehall_op_klimatrelateradrisk_line", "MULTILINESTRING((10 50, 90 50))"),
+                           ("innehall_op_klimatrelateradrisk_polygon",
+                            "MULTIPOLYGON(((10 10, 90 10, 90 90, 10 90, 10 10)))")):
+            self.assert_drawn_like_not_chosen(table, wkt)
+
+    def test_land_use_in_stages_with_an_unknown_value_is_still_drawn(self):
+        from rita_oversiktsplan.core.utbyggnad import Stage
+        layer = self.layers[MVA]
+        category = next(c for c in model.CATEGORIES if c.key == "markochvattenanvandning")
+        lookups = {lookup.name: geopackage.read_lookup(self.path, lookup) for lookup in model.LOOKUPS}
+        symbology.apply(layer, category, lookups, [Stage("Etapp 1")])
+        wkt = "MULTIPOLYGON(((10 10, 90 10, 90 90, 10 90, 10 10)))"
+        self.assertEqual(self.image(MVA, "Okänt värde", wkt), self.image(MVA, None, wkt))
+        self.assertNotEqual(self.image(MVA, None, wkt), [0xFFFFFFFF] * 3600)
 
 
 class GeoServerTests(unittest.TestCase):
